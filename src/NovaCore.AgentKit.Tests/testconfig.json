@@ -1,0 +1,24 @@
+{
+  "Providers": {
+    "Google": {
+      "ApiKey": "REPLACE_WITH_YOUR_GOOGLE_API_KEY",
+      "Model": "gemini-2.5-flash"
+    },
+    "XAI": {
+      "ApiKey": "REPLACE_WITH_YOUR_XAI_API_KEY",
+      "Model": "grok-4-fast-non-reasoning"
+    },
+    "Anthropic": {
+      "ApiKey": "REPLACE_WITH_YOUR_ANTHROPIC_API_KEY",
+      "Model": "claude-haiku-4-5-20251001"
+    },
+    "OpenAI": {
+      "ApiKey": "REPLACE_WITH_YOUR_OPENAI_API_KEY",
+      "Model": "gpt-4o"
+    }, 
+    "Groq": {
+      "ApiKey": "REPLACE_WITH_YOUR_GROQ_API_KEY",
+      "Model": "openai/gpt-oss-120b"
+    }
+  }
+}

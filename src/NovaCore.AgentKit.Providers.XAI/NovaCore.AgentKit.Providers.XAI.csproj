@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <PackageId>NovaCore.AgentKit.Providers.XAI</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>NovaCore</Authors>
+    <Description>xAI Grok provider for NovaCore.AgentKit (OpenAI-compatible)</Description>
+    <PackageTags>ai;agents;xai;grok;llm</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference Core project -->
+    <PackageReference Include="System.ClientModel" Version="1.7.0" />
+    <PackageReference Include="System.Memory.Data" Version="9.0.9" />
+    <ProjectReference Include="..\NovaCore.AgentKit.Core\NovaCore.AgentKit.Core.csproj" />
+    
+    <!-- OpenAI SDK (xAI is OpenAI-compatible) -->
+    <PackageReference Include="OpenAI" Version="2.5.0" />
+    
+    <!-- Microsoft.Extensions.AI.OpenAI provides the extension methods -->
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="9.9.1-preview.1.25474.6" />
+  </ItemGroup>
+
+</Project>
