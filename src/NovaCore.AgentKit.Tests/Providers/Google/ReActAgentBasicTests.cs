@@ -21,9 +21,9 @@ public class ReActAgentBasicTests : ProviderTestBase
                 options.ApiKey = config.Providers.Google.ApiKey;
                 options.Model = config.Providers.Google.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddTool(new CalculatorTool())
-            .WithReActConfig(cfg => cfg.MaxIterations = 10)
+            .WithReActConfig(cfg => cfg.MaxTurns = 10)
             .BuildReActAgentAsync();
         
         var result = await agent.RunAsync("Calculate 25 * 8 and tell me the result");
@@ -45,16 +45,16 @@ public class ReActAgentBasicTests : ProviderTestBase
                 options.ApiKey = config.Providers.Google.ApiKey;
                 options.Model = config.Providers.Google.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddTool(new CalculatorTool())
-            .WithReActConfig(cfg => cfg.MaxIterations = 5)
+            .WithReActConfig(cfg => cfg.MaxTurns = 5)
             .BuildReActAgentAsync();
         
         var result = await agent.RunAsync("What is 100 divided by 4?");
         
-        Assert.True(result.Iterations.Count > 0);
-        Assert.True(result.Iterations.Count <= 5);
-        Output.WriteLine($"Iterations: {result.Iterations.Count}");
+        Assert.True(result.TurnsExecuted > 0);
+        Assert.True(result.TurnsExecuted <= 5);
+        Output.WriteLine($"Iterations: {result.TurnsExecuted}");
         
         await agent.DisposeAsync();
     }
@@ -69,8 +69,8 @@ public class ReActAgentBasicTests : ProviderTestBase
                 options.ApiKey = config.Providers.Google.ApiKey;
                 options.Model = config.Providers.Google.Model;
             })
-            .WithLogger(Logger)
-            .WithReActConfig(cfg => cfg.MaxIterations = 10)
+            .WithObserver(Observer)
+            .WithReActConfig(cfg => cfg.MaxTurns = 10)
             .BuildReActAgentAsync();
         
         var result = await agent.RunAsync("What is the capital of France? Answer in one word.");

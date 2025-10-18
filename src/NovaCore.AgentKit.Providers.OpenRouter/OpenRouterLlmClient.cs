@@ -62,6 +62,12 @@ public class OpenRouterLlmClient : ILlmClient
         
         var request = BuildRequest(messages, options);
         
+        // Add stream_options to include usage in streaming response
+        request = request with
+        {
+            StreamOptions = new { include_usage = true }
+        };
+        
         await foreach (var update in OpenRouterResponseConverter.StreamResponseAsync(_restClient, request, cancellationToken))
         {
             yield return update;

@@ -154,6 +154,10 @@ internal record OpenAIRequest
     [JsonPropertyName("stream")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? Stream { get; init; }
+    
+    [JsonPropertyName("stream_options")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public object? StreamOptions { get; init; }
 }
 
 internal record OpenAIMessage
@@ -318,5 +322,9 @@ internal record OpenAIStreamChunk
     
     [JsonPropertyName("model")]
     public string Model { get; init; } = "";
+    
+    [JsonPropertyName("usage")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public OpenAIUsage? Usage { get; init; }
 }
 

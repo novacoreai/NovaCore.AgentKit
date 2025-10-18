@@ -172,11 +172,32 @@ public class AnthropicChatClient : ILlmClient
                     // Keepalive, ignore
                     break;
                 
-                case ErrorEvent errorEvent:
+                case Models.ErrorEvent errorEvent:
                     _logger?.LogError("Streaming error: {ErrorType} - {Message}", 
                         errorEvent.Error.Type, errorEvent.Error.Message);
                     throw new AnthropicApiException(errorEvent.Error.Message, errorEvent.Error.Type);
             }
+        }
+        
+        // Yield final update with usage and finish reason
+        if (usage != null || stopReason != null)
+        {
+            yield return new LlmStreamingUpdate
+            {
+                Usage = usage != null ? new LlmUsage
+                {
+                    InputTokens = usage.InputTokens,
+                    OutputTokens = usage.OutputTokens
+                } : null,
+                FinishReason = stopReason switch
+                {
+                    "end_turn" => LlmFinishReason.Stop,
+                    "max_tokens" => LlmFinishReason.Length,
+                    "tool_use" => LlmFinishReason.ToolCalls,
+                    "stop_sequence" => LlmFinishReason.Stop,
+                    _ => null
+                }
+            };
         }
     }
     

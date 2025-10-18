@@ -25,7 +25,7 @@ public class ChatAgentWithToolsTests : ProviderTestBase
                 options.ApiKey = config.Providers.Anthropic.ApiKey;
                 options.Model = config.Providers.Anthropic.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddTool(new CalculatorTool())
             .WithSystemPrompt("You are a math assistant. Use the calculator tool for calculations.")
             .BuildChatAgentAsync();
@@ -53,7 +53,7 @@ public class ChatAgentWithToolsTests : ProviderTestBase
                 options.ApiKey = config.Providers.Anthropic.ApiKey;
                 options.Model = config.Providers.Anthropic.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddTool(new CalculatorTool())
             .WithSystemPrompt("You are a math assistant. Use the calculator tool for all calculations.")
             .BuildChatAgentAsync();
@@ -87,7 +87,7 @@ public class ChatAgentWithToolsTests : ProviderTestBase
                 options.ApiKey = config.Providers.Anthropic.ApiKey;
                 options.Model = config.Providers.Anthropic.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddTool(new CalculatorTool())
             .WithSystemPrompt("You are a math assistant. Use the calculator tool.")
             .BuildChatAgentAsync();

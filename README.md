@@ -153,7 +153,7 @@ var image = FileAttachment.FromBase64(base64, "image/png");
 var agent = await new AgentBuilder()
     .UseOpenAI(apiKey, OpenAIModels.GPT4o)
     .AddTool(new SearchTool())
-    .WithReActConfig(cfg => cfg.MaxIterations = 20)
+    .WithReActConfig(cfg => cfg.MaxTurns = 20)
     .BuildReActAgentAsync();
 
 var result = await agent.RunAsync("Find Bitcoin price and calculate 10% of it");
@@ -172,7 +172,7 @@ ValueTask DisposeAsync()
 ```csharp
 .WithReActConfig(cfg =>
 {
-    cfg.MaxIterations = 20;          // Stop after N iterations
+    cfg.MaxTurns = 20;               // Stop after N turns
     cfg.DetectStuckAgent = true;     // Detect no progress
     cfg.BreakOnStuck = false;        // Continue even if stuck
 })
@@ -183,8 +183,8 @@ ValueTask DisposeAsync()
 ```csharp
 result.Success                // bool
 result.FinalAnswer            // string
-result.Iterations             // List<ReActIteration>
-result.TotalToolCalls         // int
+result.TurnsExecuted          // int
+result.TotalLlmCalls          // int
 result.Duration               // TimeSpan
 result.Error                  // string?
 ```
@@ -444,23 +444,113 @@ cfg.Sanitization.TrimWhitespace = true;
 cfg.Sanitization.RemoveNullCharacters = true;
 ```
 
-### Logging
+### Observer Pattern (Observability)
+
+Get real-time visibility into agent execution:
 
 ```csharp
-var loggerFactory = LoggerFactory.Create(builder => 
-    builder.AddConsole().SetMinimumLevel(LogLevel.Debug));
-
-.WithLogger(loggerFactory.CreateLogger("AgentKit"))
-.WithLoggerFactory(loggerFactory)  // For MCP clients
-.WithLogging(log =>
+public class MyObserver : IAgentObserver
 {
-    log.LogUserInput = LogVerbosity.Full;              // None, Truncated, Full
-    log.LogAgentOutput = LogVerbosity.Truncated;
-    log.LogToolCallRequests = LogVerbosity.Truncated;
-    log.LogToolCallResponses = LogVerbosity.None;
-    log.TruncationLength = 500;
-    log.UseStructuredLogging = true;
-})
+    public void OnLlmRequest(LlmRequestEvent evt)
+    {
+        Console.WriteLine($"→ LLM Request: {evt.Messages.Count} messages, {evt.ToolCount} tools");
+        
+        // Monitor token usage to prevent context overflow
+        var estimatedTokens = EstimateTokens(evt.Messages);
+        if (estimatedTokens > 100_000)
+            _logger.LogWarning("Large context: {Tokens} tokens", estimatedTokens);
+    }
+    
+    public void OnLlmResponse(LlmResponseEvent evt)
+    {
+        Console.WriteLine($"← LLM Response: {evt.Usage?.TotalTokens} tokens in {evt.Duration.TotalSeconds:F2}s");
+        
+        // Cost tracking
+        if (evt.Usage != null)
+            _costTracker.RecordUsage(evt.Usage.InputTokens, evt.Usage.OutputTokens);
+    }
+    
+    public void OnToolExecutionStart(ToolExecutionStartEvent evt)
+    {
+        Console.WriteLine($"🔧 Tool starting: {evt.ToolName}");
+    }
+    
+    public void OnToolExecutionComplete(ToolExecutionCompleteEvent evt)
+    {
+        Console.WriteLine($"✓ Tool completed: {evt.ToolName} ({evt.Duration.TotalSeconds:F2}s)");
+        
+        // Log errors
+        if (evt.Error != null)
+            _logger.LogError(evt.Error, "Tool {Tool} failed", evt.ToolName);
+    }
+    
+    public void OnTurnStart(TurnStartEvent evt)
+    {
+        Console.WriteLine($"Turn starting: {evt.UserMessage}");
+    }
+    
+    public void OnTurnComplete(TurnCompleteEvent evt)
+    {
+        Console.WriteLine($"Turn complete: {evt.Duration.TotalSeconds:F2}s");
+    }
+    
+    public void OnError(ErrorEvent evt)
+    {
+        _logger.LogError(evt.Exception, "Error in {Phase}", evt.Phase);
+    }
+}
+
+// Use observer
+.WithObserver(new MyObserver())
+```
+
+**Available Events:**
+
+| Event | Fires When | Key Data |
+|-------|-----------|----------|
+| `OnTurnStart` | Turn begins | `UserMessage` |
+| `OnTurnComplete` | Turn ends | `AgentTurn`, `Duration` |
+| `OnLlmRequest` | Before LLM API call | `Messages`, `ToolCount` |
+| `OnLlmResponse` | After LLM responds | `Text`, `ToolCalls`, `Usage`, `Duration` |
+| `OnToolExecutionStart` | Tool starts | `ToolName`, `Arguments` |
+| `OnToolExecutionComplete` | Tool finishes | `ToolName`, `Result`, `Duration`, `Error?` |
+| `OnError` | Any error occurs | `Exception`, `Phase` |
+
+**Event Context (all events):**
+```csharp
+evt.Context.Timestamp         // DateTime
+evt.Context.ConversationId    // string? (null for ReActAgent)
+evt.Context.MessageCount      // int
+```
+
+**Common Use Cases:**
+
+```csharp
+// Token monitoring
+public void OnLlmRequest(LlmRequestEvent evt)
+{
+    if (EstimateTokens(evt.Messages) > 500_000)
+        throw new InvalidOperationException("Token limit exceeded!");
+}
+
+// Cost tracking
+public void OnLlmResponse(LlmResponseEvent evt)
+{
+    _costs.Add(CalculateCost(evt.Usage));
+}
+
+// Progress UI
+public void OnToolExecutionStart(ToolExecutionStartEvent evt)
+{
+    _progressBar.UpdateStatus($"Running {evt.ToolName}...");
+}
+
+// Debug trace
+public void OnLlmRequest(LlmRequestEvent evt)
+{
+    File.AppendAllText("trace.log", 
+        $"{evt.Context.Timestamp}: LLM call with {evt.Messages.Count} messages\n");
+}
 ```
 
 ---
@@ -498,10 +588,8 @@ var loggerFactory = LoggerFactory.Create(builder =>
 .WithSummarization(cfg)           // ChatAgent only
 .WithToolResultFiltering(cfg)     // Tool output filtering
 .WithConfig(cfg)                  // Agent behavior
-.WithLogging(cfg)                 // Logging settings
+.WithObserver(observer)           // Observability events
 .WithReActConfig(cfg)             // ReActAgent settings
-.WithLogger(logger)
-.WithLoggerFactory(factory)
 .WithHistoryManager(manager)      // Custom history
 
 // Build
@@ -513,6 +601,8 @@ var loggerFactory = LoggerFactory.Create(builder =>
 
 ## Statistics & Monitoring
 
+### History Statistics
+
 ```csharp
 var stats = agent.GetStats();
 stats.TotalMessages                // int
@@ -521,6 +611,28 @@ stats.AssistantMessages            // int
 stats.ToolMessages                 // int
 stats.EstimatedTokens              // int
 stats.CompressionCount             // int
+```
+
+### Real-Time Monitoring (Observer)
+
+```csharp
+public class MonitoringObserver : IAgentObserver
+{
+    private int _totalTokens = 0;
+    private decimal _totalCost = 0;
+    private readonly Stopwatch _sessionTimer = Stopwatch.StartNew();
+    
+    public void OnLlmResponse(LlmResponseEvent evt)
+    {
+        if (evt.Usage != null)
+        {
+            _totalTokens += evt.Usage.TotalTokens;
+            _totalCost += CalculateCost(evt.Usage);
+            
+            Console.WriteLine($"Session: {_totalTokens} tokens, ${_totalCost:F4}, {_sessionTimer.Elapsed}");
+        }
+    }
+}
 ```
 
 ---
@@ -543,25 +655,91 @@ public class RedisHistoryStore : IHistoryStore
 .WithHistoryStore(new RedisHistoryStore(redis))
 ```
 
-### Cost Tracking (Interfaces Available)
+### Cost Tracking
+
+Use the observer pattern for real-time cost tracking:
 
 ```csharp
-// ICostTracker, ICostCalculator interfaces exist
-// Implementation: Coming soon
+public class CostTracker : IAgentObserver
+{
+    private decimal _totalCost = 0;
+    
+    public void OnLlmResponse(LlmResponseEvent evt)
+    {
+        if (evt.Usage != null)
+        {
+            var cost = CalculateCost(
+                evt.Usage.InputTokens, 
+                evt.Usage.OutputTokens,
+                modelPricing);
+            
+            _totalCost += cost;
+            _logger.LogInformation("Cost this turn: ${Cost:F4}, Total: ${Total:F4}", 
+                cost, _totalCost);
+        }
+    }
+    
+    public decimal GetTotalCost() => _totalCost;
+}
+
+.WithObserver(new CostTracker())
 ```
 
-### Rate Limiting (Interfaces Available)
+### Rate Limiting
+
+Implement rate limiting using the observer pattern:
 
 ```csharp
-// IRateLimiter interface exists
-// Implementation: Coming soon
+public class RateLimitingObserver : IAgentObserver
+{
+    private readonly SemaphoreSlim _semaphore = new(10, 10); // 10 concurrent requests
+    private readonly Queue<DateTime> _requestTimes = new();
+    private readonly int _maxRequestsPerMinute = 60;
+    
+    public void OnLlmRequest(LlmRequestEvent evt)
+    {
+        // Wait for rate limit slot
+        lock (_requestTimes)
+        {
+            var oneMinuteAgo = DateTime.UtcNow.AddMinutes(-1);
+            while (_requestTimes.Count > 0 && _requestTimes.Peek() < oneMinuteAgo)
+                _requestTimes.Dequeue();
+            
+            if (_requestTimes.Count >= _maxRequestsPerMinute)
+            {
+                var waitTime = _requestTimes.Peek().AddMinutes(1) - DateTime.UtcNow;
+                Thread.Sleep(waitTime);
+            }
+            
+            _requestTimes.Enqueue(DateTime.UtcNow);
+        }
+    }
+}
 ```
 
-### OpenTelemetry (Interfaces Available)
+### OpenTelemetry Integration
 
 ```csharp
-// IAgentTelemetry interface exists
-// Implementation: Coming soon
+public class TelemetryObserver : IAgentObserver
+{
+    private readonly ActivitySource _activitySource = new("NovaCore.AgentKit");
+    
+    public void OnTurnStart(TurnStartEvent evt)
+    {
+        var activity = _activitySource.StartActivity("AgentTurn");
+        activity?.SetTag("conversation_id", evt.Context.ConversationId);
+    }
+    
+    public void OnLlmResponse(LlmResponseEvent evt)
+    {
+        Activity.Current?.SetTag("tokens", evt.Usage?.TotalTokens);
+    }
+    
+    public void OnError(ErrorEvent evt)
+    {
+        Activity.Current?.SetStatus(ActivityStatusCode.Error, evt.Exception.Message);
+    }
+}
 ```
 
 ---
@@ -598,7 +776,8 @@ interface ILlmClient
 class LlmMessage { MessageRole Role; string? Text; List<IMessageContent>? Contents; string? ToolCallId; }
 class LlmOptions { int? MaxTokens; double? Temperature; double? TopP; Dictionary<string, LlmTool>? Tools; }
 class LlmResponse { string? Text; List<LlmToolCall>? ToolCalls; LlmFinishReason? FinishReason; LlmUsage? Usage; }
-class LlmStreamingUpdate { string? TextDelta; LlmToolCall? ToolCall; LlmFinishReason? FinishReason; }
+class LlmStreamingUpdate { string? TextDelta; LlmToolCall? ToolCall; LlmFinishReason? FinishReason; LlmUsage? Usage; }
+class LlmUsage { int InputTokens; int OutputTokens; int TotalTokens; }
 ```
 
 ### History
@@ -623,20 +802,43 @@ interface IMcpConfiguration { string Command; List<string> Arguments; Dictionary
 class McpConfiguration : IMcpConfiguration
 ```
 
+### Observer
+
+```csharp
+interface IAgentObserver
+{
+    void OnTurnStart(TurnStartEvent evt);
+    void OnTurnComplete(TurnCompleteEvent evt);
+    void OnLlmRequest(LlmRequestEvent evt);
+    void OnLlmResponse(LlmResponseEvent evt);
+    void OnToolExecutionStart(ToolExecutionStartEvent evt);
+    void OnToolExecutionComplete(ToolExecutionCompleteEvent evt);
+    void OnError(ErrorEvent evt);
+}
+
+// Event Types
+record AgentEventContext { DateTime Timestamp; string? ConversationId; int MessageCount; }
+record TurnStartEvent(AgentEventContext Context, string UserMessage);
+record TurnCompleteEvent(AgentEventContext Context, AgentTurn Result, TimeSpan Duration);
+record LlmRequestEvent(AgentEventContext Context, IReadOnlyList<LlmMessage> Messages, int ToolCount);
+record LlmResponseEvent(AgentEventContext Context, string? Text, List<LlmToolCall>? ToolCalls, LlmUsage? Usage, LlmFinishReason? FinishReason, TimeSpan Duration);
+record ToolExecutionStartEvent(AgentEventContext Context, string ToolName, string Arguments);
+record ToolExecutionCompleteEvent(AgentEventContext Context, string ToolName, string Result, TimeSpan Duration, Exception? Error);
+record ErrorEvent(AgentEventContext Context, Exception Exception, string Phase);
+```
+
 ### Configuration
 
 ```csharp
-class AgentConfig { int MaxToolRoundsPerTurn; string? SystemPrompt; SummarizationConfig Summarization; ToolResultConfig ToolResults; SanitizationOptions Sanitization; bool EnableTurnValidation; bool EnableOutputSanitization; AgentLoggingConfig Logging; }
-
-class AgentLoggingConfig { LogVerbosity LogUserInput; LogVerbosity LogAgentOutput; LogVerbosity LogToolCallRequests; LogVerbosity LogToolCallResponses; int TruncationLength; bool UseStructuredLogging; }
-enum LogVerbosity { None, Truncated, Full }
+class AgentConfig { int MaxToolRoundsPerTurn; string? SystemPrompt; SummarizationConfig Summarization; ToolResultConfig ToolResults; SanitizationOptions Sanitization; bool EnableTurnValidation; bool EnableOutputSanitization; }
 
 class SanitizationOptions { bool RemoveThinkingTags; bool UnwrapJsonFromMarkdown; bool TrimWhitespace; bool RemoveNullCharacters; }
 
-class ReActConfig { int MaxIterations; bool DetectStuckAgent; bool BreakOnStuck; }
+class ReActConfig { int MaxTurns; bool DetectStuckAgent; bool BreakOnStuck; }
 
-class ReActResult { bool Success; string FinalAnswer; List<ReActIteration> Iterations; int TotalToolCalls; TimeSpan Duration; string? Error; }
-class ReActIteration { int IterationNumber; string Thought; int ToolCallsExecuted; }
+class ReActResult { bool Success; string FinalAnswer; int TurnsExecuted; int TotalLlmCalls; TimeSpan Duration; string? Error; }
+
+class AgentTurn { string Response; int LlmCallsExecuted; string? CompletionSignal; bool Success; string? Error; }
 ```
 
 ---

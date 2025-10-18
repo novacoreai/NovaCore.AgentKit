@@ -20,7 +20,7 @@ public class ChatAgentBasicTests : ProviderTestBase
                 options.ApiKey = config.Providers.Groq.ApiKey;
                 options.Model = config.Providers.Groq.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithSystemPrompt("You are a helpful assistant. Give brief responses.")
             .BuildChatAgentAsync();
         
@@ -43,7 +43,7 @@ public class ChatAgentBasicTests : ProviderTestBase
                 options.ApiKey = config.Providers.Groq.ApiKey;
                 options.Model = config.Providers.Groq.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithSystemPrompt("You are a helpful assistant. Remember what users tell you.")
             .BuildChatAgentAsync();
         

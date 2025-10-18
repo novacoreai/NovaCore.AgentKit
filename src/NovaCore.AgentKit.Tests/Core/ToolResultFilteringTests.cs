@@ -48,7 +48,7 @@ public class ToolResultFilteringTests
             KeepRecent = 4  // Keep last 4 tool results with full content
         };
         
-        var selector = new SmartHistorySelector(_logger);
+        var selector = new SmartHistorySelector();
         
         // Act
         var filtered = selector.SelectMessagesForContext(messages, config);
@@ -90,7 +90,7 @@ public class ToolResultFilteringTests
             KeepRecent = 1  // Keep only last tool result
         };
         
-        var selector = new SmartHistorySelector(_logger);
+        var selector = new SmartHistorySelector();
         
         // Act
         var filtered = selector.SelectMessagesForContext(messages, config);
@@ -131,7 +131,7 @@ public class ToolResultFilteringTests
             KeepRecent = 0  // No filtering
         };
         
-        var selector = new SmartHistorySelector(_logger);
+        var selector = new SmartHistorySelector();
         
         // Act
         var filtered = selector.SelectMessagesForContext(messages, config);
@@ -177,7 +177,7 @@ public class ToolResultFilteringTests
             KeepRecent = 1  // Only last has full content
         };
         
-        var selector = new SmartHistorySelector(_logger);
+        var selector = new SmartHistorySelector();
         
         // Act
         var filtered = selector.SelectMessagesForContext(messages, config);
@@ -244,7 +244,7 @@ public class ToolResultFilteringTests
             KeepRecent = 0  // No filtering
         };
         
-        var selector = new SmartHistorySelector(_logger);
+        var selector = new SmartHistorySelector();
         
         // Act
         var filtered = selector.SelectMessagesForContext(messages, config);

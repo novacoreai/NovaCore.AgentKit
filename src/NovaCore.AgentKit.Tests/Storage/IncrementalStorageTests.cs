@@ -89,7 +89,7 @@ public class IncrementalStorageTests : ProviderTestBase
                 options.ApiKey = config.Providers.XAI.ApiKey;
                 options.Model = config.Providers.XAI.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithHistoryStore(historyStore)
             .ForConversation("test-conv")
             .WithSystemPrompt("You are a test assistant. Give brief responses.")
@@ -128,7 +128,7 @@ public class IncrementalStorageTests : ProviderTestBase
                 options.ApiKey = config.Providers.XAI.ApiKey;
                 options.Model = config.Providers.XAI.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithHistoryStore(historyStore)
             .ForConversation("tool-test")
             .AddTool(new CalculatorTool())

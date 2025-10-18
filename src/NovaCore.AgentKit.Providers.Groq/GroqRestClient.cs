@@ -368,5 +368,9 @@ internal record GroqStreamChunk
     
     [JsonPropertyName("model")]
     public string Model { get; init; } = "";
+    
+    [JsonPropertyName("usage")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public GroqUsage? Usage { get; init; }
 }
 

@@ -37,9 +37,6 @@ public class AgentConfig
     /// <summary>Enable output sanitization</summary>
     public bool EnableOutputSanitization { get; set; } = true;
     
-    /// <summary>Logging configuration for agent turns</summary>
-    public AgentLoggingConfig Logging { get; set; } = new();
-    
     /// <summary>
     /// [OBSOLETE] Use Summarization property instead.
     /// This property is kept for backward compatibility and maps to Summarization.

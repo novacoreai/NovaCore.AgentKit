@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Logging;
-
 namespace NovaCore.AgentKit.Core;
 
 /// <summary>
@@ -9,19 +7,19 @@ public class ReActAgent : IAsyncDisposable
 {
     private readonly Agent _agent;
     private readonly ReActConfig _config;
-    private readonly ILogger? _logger;
+    private readonly IAgentObserver? _observer;
     private readonly List<IMcpClient> _mcpClients;
     private bool _disposed;
     
     internal ReActAgent(
         Agent agent, 
         ReActConfig config, 
-        ILogger? logger = null,
+        IAgentObserver? observer = null,
         List<IMcpClient>? mcpClients = null)
     {
         _agent = agent;
         _config = config;
-        _logger = logger;
+        _observer = observer;
         _mcpClients = mcpClients ?? new List<IMcpClient>();
     }
     
@@ -30,59 +28,48 @@ public class ReActAgent : IAsyncDisposable
     /// </summary>
     public async Task<ReActResult> RunAsync(string task, CancellationToken ct = default)
     {
-        _logger?.LogInformation("ReAct agent starting task: {Task}", task);
-        
-        var iterations = new List<ReActIteration>();
-        var totalToolCalls = 0;
         var startTime = DateTime.UtcNow;
+        var totalLlmCalls = 0;
+        var turnCount = 0;
+        string lastResponse = "";
         
         // Initial task message with ReAct instructions
         var initialPrompt = BuildReActPrompt(task);
         
-        for (int i = 0; i < _config.MaxIterations; i++)
+        for (int i = 0; i < _config.MaxTurns; i++)
         {
-            _logger?.LogDebug("ReAct iteration {Iteration}/{Max}", i + 1, _config.MaxIterations);
+            turnCount++;
             
             var message = i == 0 ? initialPrompt : "Continue with the next step.";
             var turn = await _agent.ExecuteTurnAsync(message, ct);
             
-            iterations.Add(new ReActIteration
-            {
-                IterationNumber = i + 1,
-                Thought = turn.Response,
-                ToolCallsExecuted = turn.ToolCallsExecuted
-            });
-            
-            totalToolCalls += turn.ToolCallsExecuted;
+            lastResponse = turn.Response;
+            totalLlmCalls += turn.LlmCallsExecuted;
             
             // Check for completion
             if (turn.CompletionSignal != null)
             {
-                _logger?.LogInformation("ReAct agent completed task after {Iterations} iterations", i + 1);
-                
                 return new ReActResult
                 {
                     Success = true,
                     FinalAnswer = turn.CompletionSignal,
-                    Iterations = iterations,
-                    TotalToolCalls = totalToolCalls,
+                    TurnsExecuted = turnCount,
+                    TotalLlmCalls = totalLlmCalls,
                     Duration = DateTime.UtcNow - startTime
                 };
             }
             
-            // Check if agent seems stuck (no tool calls)
-            if (_config.DetectStuckAgent && turn.ToolCallsExecuted == 0 && i > 2)
+            // Check if agent seems stuck (no LLM calls with tool execution)
+            if (_config.DetectStuckAgent && turn.LlmCallsExecuted == 0 && i > 2)
             {
-                _logger?.LogWarning("Agent may be stuck (no tool calls in iteration {Iteration})", i + 1);
-                
                 if (_config.BreakOnStuck)
                 {
                     return new ReActResult
                     {
                         Success = false,
                         FinalAnswer = turn.Response,
-                        Iterations = iterations,
-                        TotalToolCalls = totalToolCalls,
+                        TurnsExecuted = turnCount,
+                        TotalLlmCalls = totalLlmCalls,
                         Duration = DateTime.UtcNow - startTime,
                         Error = "Agent stuck without making progress"
                     };
@@ -90,16 +77,14 @@ public class ReActAgent : IAsyncDisposable
             }
         }
         
-        _logger?.LogWarning("ReAct agent reached max iterations ({Max})", _config.MaxIterations);
-        
         return new ReActResult
         {
             Success = false,
-            FinalAnswer = iterations.LastOrDefault()?.Thought ?? "",
-            Iterations = iterations,
-            TotalToolCalls = totalToolCalls,
+            FinalAnswer = lastResponse,
+            TurnsExecuted = turnCount,
+            TotalLlmCalls = totalLlmCalls,
             Duration = DateTime.UtcNow - startTime,
-            Error = $"Maximum iterations ({_config.MaxIterations}) reached"
+            Error = $"Maximum turns ({_config.MaxTurns}) reached"
         };
     }
     
@@ -142,10 +127,10 @@ When finished, call the 'complete_task' tool with your answer.";
 /// </summary>
 public class ReActConfig
 {
-    /// <summary>Maximum iterations before giving up</summary>
-    public int MaxIterations { get; set; } = 20;
+    /// <summary>Maximum turns before giving up</summary>
+    public int MaxTurns { get; set; } = 20;
     
-    /// <summary>Detect when agent is stuck (no tool calls)</summary>
+    /// <summary>Detect when agent is stuck (no LLM calls)</summary>
     public bool DetectStuckAgent { get; set; } = true;
     
     /// <summary>Break execution when stuck is detected</summary>
@@ -163,31 +148,16 @@ public class ReActResult
     /// <summary>Final answer or result</summary>
     public required string FinalAnswer { get; init; }
     
-    /// <summary>All iterations performed</summary>
-    public required List<ReActIteration> Iterations { get; init; }
+    /// <summary>Number of turns executed</summary>
+    public int TurnsExecuted { get; init; }
     
-    /// <summary>Total number of tool calls across all iterations</summary>
-    public int TotalToolCalls { get; init; }
+    /// <summary>Total number of LLM calls across all turns</summary>
+    public int TotalLlmCalls { get; init; }
     
     /// <summary>Total execution duration</summary>
     public TimeSpan Duration { get; init; }
     
     /// <summary>Error message if failed</summary>
     public string? Error { get; init; }
-}
-
-/// <summary>
-/// Single iteration in ReAct loop
-/// </summary>
-public class ReActIteration
-{
-    /// <summary>Iteration number (1-based)</summary>
-    public int IterationNumber { get; init; }
-    
-    /// <summary>Agent's thought/reasoning</summary>
-    public required string Thought { get; init; }
-    
-    /// <summary>Number of tools called in this iteration</summary>
-    public int ToolCallsExecuted { get; init; }
 }
 

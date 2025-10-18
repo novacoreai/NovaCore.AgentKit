@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using NovaCore.AgentKit.Core.History;
 using NovaCore.AgentKit.Core.Sanitization;
 using NovaCore.AgentKit.Core.TurnValidation;
@@ -19,8 +18,7 @@ public class AgentBuilder
     private IHistoryStore? _historyStore;
     private AgentConfig _config = new();
     private ReActConfig _reactConfig = new();
-    private ILogger? _logger;
-    private ILoggerFactory? _loggerFactory;
+    private IAgentObserver? _observer;
     private IHistoryManager? _customHistoryManager;
     private IMcpClientFactory? _mcpClientFactory;
     
@@ -119,7 +117,6 @@ public class AgentBuilder
     public AgentBuilder WithHistoryRetention(Action<object> configure)
     {
         // No-op for backward compatibility
-        _logger?.LogWarning("WithHistoryRetention is obsolete. Use WithSummarization() or WithToolResultFiltering() instead.");
         return this;
     }
     
@@ -165,11 +162,13 @@ public class AgentBuilder
     }
     
     /// <summary>
+    /// [OBSOLETE] Use WithObserver instead.
     /// Configure logging for agent turns (what gets logged and how verbose)
     /// </summary>
-    public AgentBuilder WithLogging(Action<AgentLoggingConfig> configure)
+    [Obsolete("Use WithObserver instead. This will be removed in a future version.")]
+    public AgentBuilder WithLogging(Action<object> configure)
     {
-        configure(_config.Logging);
+        // No-op for backward compatibility
         return this;
     }
     
@@ -196,32 +195,13 @@ public class AgentBuilder
     }
     
     /// <summary>
-    /// Set custom logger
+    /// Set observer for agent execution events
     /// </summary>
-    public AgentBuilder WithLogger(ILogger logger)
+    public AgentBuilder WithObserver(IAgentObserver observer)
     {
-        _logger = logger;
+        _observer = observer;
         return this;
     }
-    
-    /// <summary>
-    /// Set logger factory for MCP clients
-    /// </summary>
-    public AgentBuilder WithLoggerFactory(ILoggerFactory loggerFactory)
-    {
-        _loggerFactory = loggerFactory;
-        return this;
-    }
-    
-    /// <summary>
-    /// Get the logger factory (for provider extensions)
-    /// </summary>
-    public ILoggerFactory? GetLoggerFactory() => _loggerFactory;
-    
-    /// <summary>
-    /// Get the logger (for provider extensions)
-    /// </summary>
-    public ILogger? GetLogger() => _logger;
     
     /// <summary>
     /// Set MCP client factory for creating MCP connections
@@ -258,13 +238,13 @@ public class AgentBuilder
     /// </summary>
     public async Task<ChatAgent> BuildChatAgentAsync(CancellationToken ct = default)
     {
-        var (agent, mcpClients) = await BuildInternalAgentAsync(ct);
+        var (agent, mcpClients) = await BuildInternalAgentAsync(_conversationId, ct);
         var chatAgent = new ChatAgent(
             agent, 
             _conversationId, 
             _historyStore, 
             mcpClients, 
-            _logger,
+            _observer,
             _config.Summarization);
         
         // Initialize (loads existing conversation if historyStore is configured)
@@ -282,10 +262,10 @@ public class AgentBuilder
         // Add complete_task tool for ReAct agents
         AddCompleteTaskTool();
         
-        var (agent, mcpClients) = await BuildInternalAgentAsync(ct);
+        var (agent, mcpClients) = await BuildInternalAgentAsync(null, ct);
         
         // ReActAgent doesn't use history store - it's ephemeral
-        return new ReActAgent(agent, _reactConfig, _logger, mcpClients);
+        return new ReActAgent(agent, _reactConfig, _observer, mcpClients);
     }
     
     /// <summary>
@@ -298,7 +278,7 @@ public class AgentBuilder
         return await BuildChatAgentAsync(ct);
     }
     
-    private async Task<(Agent agent, List<IMcpClient> mcpClients)> BuildInternalAgentAsync(CancellationToken ct = default)
+    private async Task<(Agent agent, List<IMcpClient> mcpClients)> BuildInternalAgentAsync(string? conversationId, CancellationToken ct = default)
     {
         if (_llmClient == null)
         {
@@ -311,19 +291,8 @@ public class AgentBuilder
             var configIssues = _config.Summarization.Validate();
             if (configIssues.Any())
             {
-                foreach (var issue in configIssues)
-                {
-                    _logger?.LogWarning("Summarization configuration issue: {Issue}", issue);
-                }
+                // Validation issues - could potentially fire observer event, but skip for now
             }
-            
-            _logger?.LogInformation("Summarization: {Config}", _config.Summarization.GetSummary());
-        }
-        
-        // Log tool result filtering if configured
-        if (_config.ToolResults.KeepRecent > 0)
-        {
-            _logger?.LogInformation("Tool result filtering: {Config}", _config.ToolResults.GetSummary());
         }
         
         // Initialize MCP clients and discover tools
@@ -339,15 +308,10 @@ public class AgentBuilder
                     "Call WithMcpClientFactory() before adding MCP configurations.");
             }
             
-            _logger?.LogInformation("Initializing {Count} MCP server(s)", _mcpConfigurations.Count);
-            
             foreach (var mcpConfig in _mcpConfigurations)
             {
                 try
                 {
-                    _logger?.LogDebug("Creating MCP client: {Command} {Args}", 
-                        mcpConfig.Command, string.Join(" ", mcpConfig.Arguments));
-                    
                     var mcpClient = await _mcpClientFactory.CreateClientAsync(mcpConfig, ct);
                     mcpClients.Add(mcpClient);
                     
@@ -359,13 +323,9 @@ public class AgentBuilder
                     {
                         discoveredTools.Add(new McpToolProxy(mcpClient, toolDef));
                     }
-                    
-                    _logger?.LogInformation("Discovered {Count} tools from MCP server", toolDefs.Count);
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    _logger?.LogError(ex, "Failed to initialize MCP server: {Command}", mcpConfig.Command);
-                    
                     // Clean up any clients we've created so far
                     foreach (var client in mcpClients)
                     {
@@ -389,14 +349,11 @@ public class AgentBuilder
         allTools.AddRange(discoveredTools);
         allTools.AddRange(_uiTools);
         
-        _logger?.LogDebug("Total tools available: {Count} (Manual: {Manual}, MCP: {Mcp}, UI: {UI})", 
-            allTools.Count, _tools.Count, discoveredTools.Count, _uiTools.Count);
-        
         // Create history manager (simplified - no auto-compression)
-        var historyManager = _customHistoryManager ?? new InMemoryHistoryManager(_logger);
+        var historyManager = _customHistoryManager ?? new InMemoryHistoryManager();
         
         // Create history selector
-        var historySelector = new SmartHistorySelector(_logger);
+        var historySelector = new SmartHistorySelector();
         
         // Create turn validator
         var turnValidator = new TurnValidator();
@@ -413,7 +370,8 @@ public class AgentBuilder
             turnValidator,
             sanitizer,
             _config,
-            _logger);
+            _observer,
+            conversationId);
         
         return (agent, mcpClients);
     }
@@ -426,7 +384,7 @@ public class AgentBuilder
             return;
         }
         
-        _tools.Add(new CompleteTaskTool(_logger));
+        _tools.Add(new CompleteTaskTool());
     }
 }
 
@@ -435,11 +393,8 @@ public class AgentBuilder
 /// </summary>
 internal class CompleteTaskTool : ITool
 {
-    private readonly ILogger? _logger;
-    
-    public CompleteTaskTool(ILogger? logger = null)
+    public CompleteTaskTool()
     {
-        _logger = logger;
     }
     
     public string Name => "complete_task";
@@ -461,8 +416,6 @@ internal class CompleteTaskTool : ITool
     {
         try
         {
-            _logger?.LogDebug("complete_task called with args: {Args}", argsJson);
-            
             var json = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(argsJson);
             
             // Unwrap common wrappers (args, arguments, parameters)
@@ -471,7 +424,6 @@ internal class CompleteTaskTool : ITool
                 json.TryGetProperty("parameters", out argsWrapped))
             {
                 json = argsWrapped;
-                _logger?.LogDebug("Unwrapped wrapper, now using: {Json}", json.ToString());
             }
             
             // Try "answer" (primary) - handle both string and number
@@ -481,7 +433,6 @@ internal class CompleteTaskTool : ITool
                     ? answer.GetString() ?? string.Empty
                     : answer.ToString();
                 
-                _logger?.LogInformation("complete_task returning: {Result}", result);
                 return Task.FromResult(result);
             }
             
@@ -492,7 +443,6 @@ internal class CompleteTaskTool : ITool
                     ? finalAnswer.GetString() ?? string.Empty
                     : finalAnswer.ToString();
                 
-                _logger?.LogInformation("complete_task returning (from final_answer): {Result}", result);
                 return Task.FromResult(result);
             }
             
@@ -500,16 +450,13 @@ internal class CompleteTaskTool : ITool
             if (json.ValueKind == System.Text.Json.JsonValueKind.String)
             {
                 var result = json.GetString() ?? string.Empty;
-                _logger?.LogInformation("complete_task returning (from string): {Result}", result);
                 return Task.FromResult(result);
             }
             
-            _logger?.LogWarning("complete_task could not parse answer from: {Args}", argsJson);
             return Task.FromResult(string.Empty);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _logger?.LogError(ex, "complete_task failed to parse args: {Args}", argsJson);
             return Task.FromResult(string.Empty);
         }
     }

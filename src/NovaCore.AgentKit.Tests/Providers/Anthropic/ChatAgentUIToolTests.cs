@@ -26,7 +26,7 @@ public class ChatAgentUIToolTests : ProviderTestBase
                 options.ApiKey = config.Providers.Anthropic.ApiKey;
                 options.Model = config.Providers.Anthropic.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddUITool(new PaymentUITool())
             .WithSystemPrompt("You are a payment assistant. When user wants to pay, use the show_payment_page tool.")
             .BuildChatAgentAsync();
@@ -66,7 +66,7 @@ public class ChatAgentUIToolTests : ProviderTestBase
                 options.ApiKey = config.Providers.Anthropic.ApiKey;
                 options.Model = config.Providers.Anthropic.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddUITool(new PaymentUITool())
             .WithSystemPrompt("You are a payment assistant. Use show_payment_page tool when user wants to pay.")
             .BuildChatAgentAsync();
@@ -114,7 +114,7 @@ public class ChatAgentUIToolTests : ProviderTestBase
                 options.ApiKey = config.Providers.Anthropic.ApiKey;
                 options.Model = config.Providers.Anthropic.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddUITool(new PaymentUITool())
             .WithSystemPrompt("You are a payment assistant. Help users complete payments using the show_payment_page tool.")
             .BuildChatAgentAsync();

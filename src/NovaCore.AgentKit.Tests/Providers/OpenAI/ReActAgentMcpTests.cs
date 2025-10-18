@@ -30,15 +30,14 @@ public class ReActAgentMcpTests : ProviderTestBase
                 options.ApiKey = config.Providers.OpenAI.ApiKey;
                 options.Model = config.Providers.OpenAI.Model;
             })
-            .WithLogger(Logger)
-            .WithLoggerFactory(LoggerFactory)
+            .WithObserver(Observer)
             .WithMcpClientFactory(mcpFactory)
             .WithMcp(mcpConfig)
             .WithToolResultFiltering(cfg =>
             {
                 cfg.KeepRecent = 1;  // Keep only last tool result (browser agent pattern)
             })
-            .WithReActConfig(cfg => cfg.MaxIterations = 15)
+            .WithReActConfig(cfg => cfg.MaxTurns = 15)
             .BuildReActAgentAsync();
         
         var result = await agent.RunAsync("Go to example.com and tell me the main heading");

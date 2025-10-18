@@ -21,7 +21,7 @@ public class ChatAgentWithToolsTests : ProviderTestBase
                 options.ApiKey = config.Providers.XAI.ApiKey;
                 options.Model = config.Providers.XAI.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddTool(new CalculatorTool())
             .WithSystemPrompt("You are a math assistant. Use the calculator tool.")
             .BuildChatAgentAsync();
@@ -44,7 +44,7 @@ public class ChatAgentWithToolsTests : ProviderTestBase
                 options.ApiKey = config.Providers.XAI.ApiKey;
                 options.Model = config.Providers.XAI.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddTool(new CalculatorTool())
             .BuildChatAgentAsync();
         

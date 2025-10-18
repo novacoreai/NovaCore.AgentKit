@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using NovaCore.AgentKit.Core;
 using NovaCore.AgentKit.Core.History;
 using NovaCore.AgentKit.MCP;
@@ -34,44 +33,25 @@ public class ReActAgentMcpTests : ProviderTestBase
                 options.ApiKey = config.Providers.Groq.ApiKey;
                 options.Model = config.Providers.Groq.Model;
             })
-            .WithLogger(Logger)
-            .WithLoggerFactory(LoggerFactory)
-            .WithLogging(cfg =>
-            {
-                cfg.LogUserInput = LogVerbosity.Full;
-                cfg.LogAgentOutput = LogVerbosity.Full;
-                cfg.LogToolCallRequests = LogVerbosity.Full;
-                cfg.LogToolCallResponses = LogVerbosity.Full;
-            })
+            .WithObserver(Observer)
             .WithMcpClientFactory(mcpFactory)
             .WithMcp(mcpConfig)
             .WithToolResultFiltering(cfg =>
             {
                 cfg.KeepRecent = 1;  // Keep only last tool result (browser agent pattern)
             })
-            .WithReActConfig(cfg => cfg.MaxIterations = 5) // Reduce iterations for faster failure
+            .WithReActConfig(cfg => cfg.MaxTurns = 5) // Reduce iterations for faster failure
             .BuildReActAgentAsync();
         
         var result = await agent.RunAsync("Go to example.com and tell me the main heading");
         
-        // Log detailed information about what happened
-        Logger.LogInformation("=== ReAct Execution Complete ===");
-        Logger.LogInformation("Success: {Success}", result.Success);
-        Logger.LogInformation("Total Iterations: {Count}", result.Iterations.Count);
-        Logger.LogInformation("Total Tool Calls: {Count}", result.TotalToolCalls);
-        Logger.LogInformation("Final Answer: {Answer}", result.FinalAnswer);
-        
-        // Log each iteration's details
-        foreach (var iteration in result.Iterations)
-        {
-            Logger.LogInformation("--- Iteration {Number} ---", iteration.IterationNumber);
-            Logger.LogInformation("Tool Calls: {Count}", iteration.ToolCallsExecuted);
-            Logger.LogInformation("Thought: {Thought}", 
-                iteration.Thought?.Substring(0, Math.Min(400, iteration.Thought?.Length ?? 0)) ?? "(no thought)");
-        }
-        
-        Assert.True(result.Success, $"Agent failed. Iterations: {result.Iterations.Count}, Tool Calls: {result.TotalToolCalls}");
+        // Output results
+        Output.WriteLine($"Success: {result.Success}");
         Output.WriteLine($"Answer: {result.FinalAnswer}");
+        Output.WriteLine($"Turns: {result.TurnsExecuted}");
+        Output.WriteLine($"LLM calls: {result.TotalLlmCalls}");
+        
+        Assert.True(result.Success, $"Agent failed. Turns: {result.TurnsExecuted}, LLM calls: {result.TotalLlmCalls}");
         
         await agent.DisposeAsync();
     }

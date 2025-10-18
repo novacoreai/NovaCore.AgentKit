@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using NovaCore.AgentKit.Core.History;
 
 namespace NovaCore.AgentKit.Core;
@@ -12,7 +11,7 @@ public class ChatAgent : IAsyncDisposable
     private readonly string _conversationId;
     private readonly IHistoryStore? _historyStore;
     private readonly List<IMcpClient> _mcpClients;
-    private readonly ILogger? _logger;
+    private readonly IAgentObserver? _observer;
     private readonly SummarizationConfig _summarizationConfig;
     private bool _disposed;
     
@@ -27,14 +26,14 @@ public class ChatAgent : IAsyncDisposable
         string conversationId, 
         IHistoryStore? historyStore = null,
         List<IMcpClient>? mcpClients = null,
-        ILogger? logger = null,
+        IAgentObserver? observer = null,
         SummarizationConfig? summarizationConfig = null)
     {
         _agent = agent;
         _conversationId = conversationId;
         _historyStore = historyStore;
         _mcpClients = mcpClients ?? new List<IMcpClient>();
-        _logger = logger;
+        _observer = observer;
         _summarizationConfig = summarizationConfig ?? new SummarizationConfig();
     }
     
@@ -50,10 +49,6 @@ public class ChatAgent : IAsyncDisposable
         {
             _agent.GetHistoryManager().ReplaceHistory(existingHistory);
             _persistedMessageCount = existingHistory.Count;
-            
-            _logger?.LogInformation(
-                "Resumed conversation {Id} with {Count} existing messages",
-                _conversationId, existingHistory.Count);
         }
         
         // Load latest checkpoint to track where we are
@@ -61,10 +56,6 @@ public class ChatAgent : IAsyncDisposable
         if (latestCheckpoint != null)
         {
             _lastCheckpointTurnNumber = latestCheckpoint.UpToTurnNumber;
-            
-            _logger?.LogDebug(
-                "Found existing checkpoint at turn {Turn}",
-                _lastCheckpointTurnNumber);
         }
     }
     
@@ -82,10 +73,6 @@ public class ChatAgent : IAsyncDisposable
         {
             await _historyStore.AppendMessageAsync(_conversationId, message, ct);
             _persistedMessageCount++;
-            
-            _logger?.LogDebug(
-                "Persisted incoming message (role: {Role}) for conversation {Id}",
-                message.Role, _conversationId);
         }
         
         // Execute turn (may pause at UI tool)
@@ -113,10 +100,6 @@ public class ChatAgent : IAsyncDisposable
             {
                 await _historyStore.AppendMessagesAsync(_conversationId, newMessages, ct);
                 _persistedMessageCount = history.Count;
-                
-                _logger?.LogDebug(
-                    "Persisted {Count} new message(s) for conversation {Id}",
-                    newMessages.Count, _conversationId);
             }
             
             // Check if we need to create an automatic checkpoint
@@ -176,10 +159,6 @@ public class ChatAgent : IAsyncDisposable
         // Formula: TriggerAt - KeepRecent = Messages to summarize
         var messagesToSummarize = _summarizationConfig.TriggerAt - _summarizationConfig.KeepRecent;
         
-        _logger?.LogInformation(
-            "Auto-summarization triggered: History at {Current} messages (TriggerAt: {Trigger}). Will summarize first {Count} messages.",
-            currentHistory.Count, _summarizationConfig.TriggerAt, messagesToSummarize);
-        
         try
         {
             // Checkpoint turn number = how many messages we're summarizing
@@ -217,11 +196,6 @@ public class ChatAgent : IAsyncDisposable
                 return;
             }
             
-            _logger?.LogDebug(
-                "Preparing {Original} messages for summarization (after filtering: {Filtered})",
-                rawMessagesToSummarize.Count,
-                filteredMessagesToSummarize.Count);
-            
             // Serialize filtered messages for the summarization tool
             var historyJson = System.Text.Json.JsonSerializer.Serialize(new
             {
@@ -240,7 +214,6 @@ public class ChatAgent : IAsyncDisposable
             });
             
             // Call the summarization tool
-            _logger?.LogDebug("Calling summarization tool for {Count} messages", filteredMessagesToSummarize.Count);
             var summaryJson = await _summarizationConfig.SummarizationTool.InvokeAsync(historyJson, ct);
             
             // Extract summary from result (expect { "summary": "..." } or just the text)
@@ -281,22 +254,13 @@ public class ChatAgent : IAsyncDisposable
             await _historyStore.CreateCheckpointAsync(_conversationId, checkpoint, ct);
             _lastCheckpointTurnNumber = checkpointTurnNumber;
             
-            _logger?.LogInformation(
-                "Created automatic checkpoint at turn {Turn} (summarized {Filtered}/{Original} messages after tool filtering, keeping {Recent} recent)",
-                checkpointTurnNumber, filteredMessagesToSummarize.Count, rawMessagesToSummarize.Count, _summarizationConfig.KeepRecent);
-            
             // NOW: Remove the summarized messages from in-memory history
             // Keep only the recent messages (after the checkpoint)
             var recentMessages = currentHistory.Skip(messagesToSummarize).ToList();
             _agent.GetHistoryManager().ReplaceHistory(recentMessages);
-            
-            _logger?.LogInformation(
-                "Compressed in-memory history: {Before} → {After} messages (summarized {Summarized} into checkpoint)",
-                currentHistory.Count, recentMessages.Count, messagesToSummarize);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _logger?.LogError(ex, "Failed to create automatic checkpoint");
             // Don't throw - checkpoint failure shouldn't break the conversation
         }
     }
@@ -351,10 +315,6 @@ public class ChatAgent : IAsyncDisposable
         };
         
         await _historyStore.CreateCheckpointAsync(_conversationId, checkpoint, ct);
-        
-        _logger?.LogInformation(
-            "Created checkpoint for conversation {Id} at turn {Turn}",
-            _conversationId, turnNumber);
     }
     
     /// <summary>

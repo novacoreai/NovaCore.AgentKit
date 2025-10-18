@@ -21,7 +21,7 @@ public class ChatAgentWithToolsTests : ProviderTestBase
                 options.ApiKey = config.Providers.Google.ApiKey;
                 options.Model = config.Providers.Google.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddTool(new CalculatorTool())
             .WithSystemPrompt("You are a math assistant. Use the calculator tool.")
             .BuildChatAgentAsync();
@@ -44,7 +44,7 @@ public class ChatAgentWithToolsTests : ProviderTestBase
                 options.ApiKey = config.Providers.Google.ApiKey;
                 options.Model = config.Providers.Google.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddTool(new CalculatorTool())
             .WithSystemPrompt("You are a math assistant. Use the calculator tool for all calculations.")
             .BuildChatAgentAsync();
@@ -67,7 +67,7 @@ public class ChatAgentWithToolsTests : ProviderTestBase
                 options.ApiKey = config.Providers.Google.ApiKey;
                 options.Model = config.Providers.Google.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddTool(new CalculatorTool())
             .WithSystemPrompt("You are a math assistant. Use the calculator tool.")
             .BuildChatAgentAsync();

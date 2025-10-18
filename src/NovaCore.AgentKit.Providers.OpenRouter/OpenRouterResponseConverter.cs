@@ -83,6 +83,8 @@ internal static class OpenRouterResponseConverter
     {
         // Track streaming state for tool calls (they come in pieces)
         var toolCallBuilders = new Dictionary<int, ToolCallBuilder>();
+        OpenRouterUsage? usage = null;
+        string? finishReason = null;
         
         await foreach (var chunk in restClient.CreateChatCompletionStreamAsync(request, cancellationToken))
         {
@@ -97,11 +99,26 @@ internal static class OpenRouterResponseConverter
                 continue;
             }
             
-            if (streamChunk?.Choices == null || !streamChunk.Choices.Any())
+            if (streamChunk == null)
+                continue;
+            
+            // Collect usage if present (typically in final chunk)
+            if (streamChunk.Usage != null)
+            {
+                usage = streamChunk.Usage;
+            }
+            
+            if (streamChunk.Choices == null || !streamChunk.Choices.Any())
                 continue;
             
             var choice = streamChunk.Choices[0];
             var delta = choice.Delta;
+            
+            // Capture finish reason
+            if (choice.FinishReason != null)
+            {
+                finishReason = choice.FinishReason;
+            }
             
             if (delta == null)
                 continue;
@@ -163,6 +180,27 @@ internal static class OpenRouterResponseConverter
                     }
                 }
             }
+        }
+        
+        // Yield final update with usage and finish reason
+        if (usage != null || finishReason != null)
+        {
+            yield return new LlmStreamingUpdate
+            {
+                Usage = usage != null ? new LlmUsage
+                {
+                    InputTokens = usage.PromptTokens,
+                    OutputTokens = usage.CompletionTokens
+                } : null,
+                FinishReason = finishReason switch
+                {
+                    "stop" => LlmFinishReason.Stop,
+                    "length" => LlmFinishReason.Length,
+                    "tool_calls" => LlmFinishReason.ToolCalls,
+                    "content_filter" => LlmFinishReason.ContentFilter,
+                    _ => null
+                }
+            };
         }
     }
     

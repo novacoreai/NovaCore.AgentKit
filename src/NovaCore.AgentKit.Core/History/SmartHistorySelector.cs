@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging;
 using NovaCore.AgentKit.Core.TurnValidation;
 
 namespace NovaCore.AgentKit.Core.History;
@@ -8,12 +7,10 @@ namespace NovaCore.AgentKit.Core.History;
 /// </summary>
 public class SmartHistorySelector : IHistorySelector
 {
-    private readonly ILogger? _logger;
     private readonly ITurnValidator _turnValidator;
     
-    public SmartHistorySelector(ILogger? logger = null)
+    public SmartHistorySelector()
     {
-        _logger = logger;
         _turnValidator = new TurnValidator();
     }
     
@@ -41,10 +38,6 @@ public class SmartHistorySelector : IHistorySelector
         // If checkpoint is provided, inject checkpoint summary
         if (checkpoint != null)
         {
-            _logger?.LogDebug(
-                "Using checkpoint summary for messages up to turn {Turn}",
-                checkpoint.UpToTurnNumber);
-            
             // Create a system message with the checkpoint summary
             var checkpointMessage = new ChatMessage(
                 ChatRole.System, 
@@ -65,14 +58,6 @@ public class SmartHistorySelector : IHistorySelector
         // Combine system messages with filtered conversation
         var result = new List<ChatMessage>(systemMessages);
         result.AddRange(filteredMessages);
-        
-        _logger?.LogDebug(
-            "History selection: {FullCount} → {SelectedCount} messages (System: {SystemCount}, Conversation: {ConvCount}, Checkpoint: {HasCheckpoint})",
-            fullHistory.Count,
-            result.Count,
-            systemMessages.Count,
-            filteredMessages.Count,
-            checkpoint != null);
         
         // Simple validation for edge cases where messages were actually removed (checkpoint skip)
         result = EnsureValidStart(result);
@@ -144,12 +129,6 @@ public class SmartHistorySelector : IHistorySelector
             }
         }
         
-        _logger?.LogDebug(
-            "Tool result filtering: {Total} tool messages, {Kept} kept full, {Replaced} replaced with placeholders",
-            toolMessages.Count,
-            toolResultsToKeep.Count,
-            replacedCount);
-        
         return result;
     }
     
@@ -177,10 +156,6 @@ public class SmartHistorySelector : IHistorySelector
         // Ensure conversation starts with User (after system messages)
         if (firstNonSystem.Role != ChatRole.User)
         {
-            _logger?.LogDebug(
-                "First non-system message is {Role}, inserting placeholder User message",
-                firstNonSystem.Role);
-            
             var systemMessages = messages.TakeWhile(m => m.Role == ChatRole.System).ToList();
             var conversationMessages = messages.SkipWhile(m => m.Role == ChatRole.System).ToList();
             
@@ -189,17 +164,6 @@ public class SmartHistorySelector : IHistorySelector
             result.AddRange(conversationMessages);
             
             return result;
-        }
-        
-        // Quick validation check - this should always pass with the placeholder approach
-        var validation = _turnValidator.Validate(messages);
-        
-        if (!validation.IsValid)
-        {
-            // This should be extremely rare now - log as warning since it indicates an issue
-            _logger?.LogWarning(
-                "Unexpected conversation structure issue. Errors: {Errors}",
-                string.Join(", ", validation.Errors));
         }
         
         return messages;

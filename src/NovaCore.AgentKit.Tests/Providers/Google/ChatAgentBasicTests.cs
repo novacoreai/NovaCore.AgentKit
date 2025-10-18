@@ -20,7 +20,7 @@ public class ChatAgentBasicTests : ProviderTestBase
                 options.ApiKey = config.Providers.Google.ApiKey;
                 options.Model = config.Providers.Google.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithSystemPrompt("You are a helpful assistant. Give brief, clear responses.")
             .BuildChatAgentAsync();
         
@@ -44,7 +44,7 @@ public class ChatAgentBasicTests : ProviderTestBase
                 options.ApiKey = config.Providers.Google.ApiKey;
                 options.Model = config.Providers.Google.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithSystemPrompt("You are a helpful assistant. Remember what users tell you.")
             .BuildChatAgentAsync();
         
@@ -67,7 +67,7 @@ public class ChatAgentBasicTests : ProviderTestBase
                 options.ApiKey = config.Providers.Google.ApiKey;
                 options.Model = config.Providers.Google.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithSystemPrompt("You are a vision assistant. Describe what you see.")
             .BuildChatAgentAsync();
         

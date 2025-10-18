@@ -31,7 +31,7 @@ public class CheckpointTests : ProviderTestBase
                 options.ApiKey = config.Providers.XAI.ApiKey;
                 options.Model = config.Providers.XAI.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithHistoryStore(historyStore)
             .ForConversation("checkpoint-test")
             .WithSystemPrompt("You are a test assistant. Give very brief responses.")
@@ -73,7 +73,7 @@ public class CheckpointTests : ProviderTestBase
                 options.ApiKey = config.Providers.XAI.ApiKey;
                 options.Model = config.Providers.XAI.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithHistoryStore(historyStore)
             .ForConversation("manual-checkpoint-test")
             .WithSystemPrompt("You are a test assistant. Give very brief responses.")

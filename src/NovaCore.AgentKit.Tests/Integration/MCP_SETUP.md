@@ -125,7 +125,7 @@ await agent.SendAsync(
 var agent = new AgentBuilder()
     .UseGoogle(apiKey, "gemini-2.5-flash")
     .AddTools(playwrightMcpTools)
-    .WithReActConfig(cfg => cfg.MaxIterations = 30)
+    .WithReActConfig(cfg => cfg.MaxTurns = 30)
     .BuildReActAgent();
 
 var result = await agent.RunAsync(
@@ -349,5 +349,5 @@ var mcpConfig = new McpConfiguration
 1. **Use headless mode** for faster execution in CI/CD
 2. **Reuse MCP client** - don't create/dispose for every request
 3. **Use snapshots** instead of screenshots when possible (faster)
-4. **Limit iterations** in ReActAgent to prevent runaway loops
+4. **Limit turns** in ReActAgent to prevent runaway loops
 5. **Cache browser installations** in CI/CD environments

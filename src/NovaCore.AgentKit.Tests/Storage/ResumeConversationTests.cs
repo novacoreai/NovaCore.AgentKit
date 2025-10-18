@@ -33,7 +33,7 @@ public class ResumeConversationTests : ProviderTestBase
                 options.ApiKey = config.Providers.XAI.ApiKey;
                 options.Model = config.Providers.XAI.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithHistoryStore(historyStore)
             .ForConversation(conversationId)
             .WithSystemPrompt("You are a test assistant. Remember what users tell you.")
@@ -52,7 +52,7 @@ public class ResumeConversationTests : ProviderTestBase
                 options.ApiKey = config.Providers.XAI.ApiKey;
                 options.Model = config.Providers.XAI.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithHistoryStore(historyStore)
             .ForConversation(conversationId)  // Same conversation ID
             .WithSystemPrompt("You are a test assistant. Remember what users tell you.")
@@ -89,7 +89,7 @@ public class ResumeConversationTests : ProviderTestBase
                 options.ApiKey = config.Providers.XAI.ApiKey;
                 options.Model = config.Providers.XAI.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithHistoryStore(historyStore)
             .ForConversation(conversationId)
             .WithSystemPrompt("You are a helpful math tutor.")
@@ -106,7 +106,7 @@ public class ResumeConversationTests : ProviderTestBase
                 options.ApiKey = config.Providers.XAI.ApiKey;
                 options.Model = config.Providers.XAI.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithHistoryStore(historyStore)
             .ForConversation(conversationId)
             .WithSystemPrompt("You are a helpful math tutor.")

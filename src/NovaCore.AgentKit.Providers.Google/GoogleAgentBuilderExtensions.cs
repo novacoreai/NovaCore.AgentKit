@@ -42,20 +42,16 @@ public static class GoogleAgentBuilderExtensions
             }
         }
         
-        // Get logger from builder
-        var loggerFactory = builder.GetLoggerFactory();
-        var logger = loggerFactory?.CreateLogger(typeof(GoogleChatClient).FullName!) ?? builder.GetLogger();
-        
         // Create ILlmClient based on auth type
         ILlmClient chatClient;
         
         if (options.UseVertexAI)
         {
-            chatClient = CreateVertexAIChatClient(options, logger);
+            chatClient = CreateVertexAIChatClient(options);
         }
         else
         {
-            chatClient = CreateGoogleAIChatClient(options, logger);
+            chatClient = CreateGoogleAIChatClient(options);
         }
         
         // Register with builder
@@ -79,7 +75,7 @@ public static class GoogleAgentBuilderExtensions
         });
     }
     
-    private static ILlmClient CreateGoogleAIChatClient(GoogleOptions options, Microsoft.Extensions.Logging.ILogger? logger = null)
+    private static ILlmClient CreateGoogleAIChatClient(GoogleOptions options)
     {
         // Create HttpClient for direct API calls (like Anthropic implementation)
         var httpClient = new HttpClient
@@ -90,12 +86,12 @@ public static class GoogleAgentBuilderExtensions
         // Use our custom GoogleChatClient that makes direct HTTP API calls
         // This gives us full control over tool schema handling
         // Google requires stricter schemas (no flexible objects/dictionaries)
-        var chatClient = new GoogleChatClient(httpClient, options, logger);
+        var chatClient = new GoogleChatClient(httpClient, options);
         
         return chatClient;
     }
     
-    private static ILlmClient CreateVertexAIChatClient(GoogleOptions options, Microsoft.Extensions.Logging.ILogger? logger = null)
+    private static ILlmClient CreateVertexAIChatClient(GoogleOptions options)
     {
         // For Vertex AI support with GCP credentials
         // The host app should:

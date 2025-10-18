@@ -392,5 +392,9 @@ internal record XAIStreamChunk
     
     [JsonPropertyName("model")]
     public string Model { get; init; } = "";
+    
+    [JsonPropertyName("usage")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public XAIUsage? Usage { get; init; }
 }
 

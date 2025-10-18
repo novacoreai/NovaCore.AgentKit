@@ -25,9 +25,9 @@ public class ReActAgentBasicTests : ProviderTestBase
                 options.ApiKey = config.Providers.Anthropic.ApiKey;
                 options.Model = config.Providers.Anthropic.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddTool(new CalculatorTool())
-            .WithReActConfig(cfg => cfg.MaxIterations = 10)
+            .WithReActConfig(cfg => cfg.MaxTurns = 10)
             .BuildReActAgentAsync();
         
         // Act
@@ -40,8 +40,8 @@ public class ReActAgentBasicTests : ProviderTestBase
         
         Output.WriteLine($"Success: {result.Success}");
         Output.WriteLine($"Answer: {result.FinalAnswer}");
-        Output.WriteLine($"Iterations: {result.Iterations.Count}");
-        Output.WriteLine($"Tool calls: {result.TotalToolCalls}");
+        Output.WriteLine($"Iterations: {result.TurnsExecuted}");
+        Output.WriteLine($"Tool calls: {result.TotalLlmCalls}");
         
         await agent.DisposeAsync();
     }
@@ -57,23 +57,19 @@ public class ReActAgentBasicTests : ProviderTestBase
                 options.ApiKey = config.Providers.Anthropic.ApiKey;
                 options.Model = config.Providers.Anthropic.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddTool(new CalculatorTool())
-            .WithReActConfig(cfg => cfg.MaxIterations = 5)
+            .WithReActConfig(cfg => cfg.MaxTurns = 5)
             .BuildReActAgentAsync();
         
         // Act
         var result = await agent.RunAsync("What is 100 divided by 4?");
         
         // Assert
-        Assert.True(result.Iterations.Count > 0, "Should have at least 1 iteration");
-        Assert.True(result.Iterations.Count <= 5, "Should not exceed max iterations");
+        Assert.True(result.TurnsExecuted > 0, "Should have at least 1 iteration");
+        Assert.True(result.TurnsExecuted <= 5, "Should not exceed max iterations");
         
-        Output.WriteLine($"Iterations: {result.Iterations.Count}");
-        foreach (var iteration in result.Iterations)
-        {
-            Output.WriteLine($"  Iteration {iteration.IterationNumber}: {iteration.ToolCallsExecuted} tool calls");
-        }
+        Output.WriteLine($"Turns: {result.TurnsExecuted}, LLM calls: {result.TotalLlmCalls}");
         
         await agent.DisposeAsync();
     }
@@ -89,8 +85,8 @@ public class ReActAgentBasicTests : ProviderTestBase
                 options.ApiKey = config.Providers.Anthropic.ApiKey;
                 options.Model = config.Providers.Anthropic.Model;
             })
-            .WithLogger(Logger)
-            .WithReActConfig(cfg => cfg.MaxIterations = 10)
+            .WithObserver(Observer)
+            .WithReActConfig(cfg => cfg.MaxTurns = 10)
             .BuildReActAgentAsync();
         
         // Act - Simple task that doesn't require tools
@@ -102,7 +98,7 @@ public class ReActAgentBasicTests : ProviderTestBase
         Assert.Contains("Paris", result.FinalAnswer, StringComparison.OrdinalIgnoreCase);
         
         Output.WriteLine($"Final answer: {result.FinalAnswer}");
-        Output.WriteLine($"Completed in {result.Iterations.Count} iterations");
+        Output.WriteLine($"Completed in {result.TurnsExecuted} iterations");
         
         await agent.DisposeAsync();
     }

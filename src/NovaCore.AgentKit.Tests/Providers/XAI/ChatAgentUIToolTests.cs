@@ -22,7 +22,7 @@ public class ChatAgentUIToolTests : ProviderTestBase
                 options.ApiKey = config.Providers.XAI.ApiKey;
                 options.Model = config.Providers.XAI.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddUITool(new PaymentUITool())
             .WithSystemPrompt("You are a payment assistant. Use show_payment_page tool when user wants to pay.")
             .BuildChatAgentAsync();
@@ -46,7 +46,7 @@ public class ChatAgentUIToolTests : ProviderTestBase
                 options.ApiKey = config.Providers.XAI.ApiKey;
                 options.Model = config.Providers.XAI.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddUITool(new PaymentUITool())
             .WithSystemPrompt("You are a payment assistant. When you receive payment confirmation with a transaction ID, always mention the transaction ID in your response.")
             .BuildChatAgentAsync();

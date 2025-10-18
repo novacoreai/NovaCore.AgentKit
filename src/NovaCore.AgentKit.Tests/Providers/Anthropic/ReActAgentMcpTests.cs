@@ -35,15 +35,14 @@ public class ReActAgentMcpTests : ProviderTestBase
                 options.ApiKey = config.Providers.Anthropic.ApiKey;
                 options.Model = config.Providers.Anthropic.Model;
             })
-            .WithLogger(Logger)
-            .WithLoggerFactory(LoggerFactory)
+            .WithObserver(Observer)
             .WithMcpClientFactory(mcpFactory)
             .WithMcp(mcpConfig)
             .WithToolResultFiltering(cfg =>
             {
                 cfg.KeepRecent = 1;  // Critical for browser - keep only last tool result
             })
-            .WithReActConfig(cfg => cfg.MaxIterations = 15)
+            .WithReActConfig(cfg => cfg.MaxTurns = 15)
             .BuildReActAgentAsync();
         
         // Act
@@ -56,8 +55,8 @@ public class ReActAgentMcpTests : ProviderTestBase
         
         Output.WriteLine($"Success: {result.Success}");
         Output.WriteLine($"Answer: {result.FinalAnswer}");
-        Output.WriteLine($"Iterations: {result.Iterations.Count}");
-        Output.WriteLine($"Tool calls: {result.TotalToolCalls}");
+        Output.WriteLine($"Turns: {result.TurnsExecuted}");
+        Output.WriteLine($"LLM calls: {result.TotalLlmCalls}");
         Output.WriteLine($"Duration: {result.Duration.TotalSeconds:F1}s");
         
         await agent.DisposeAsync();

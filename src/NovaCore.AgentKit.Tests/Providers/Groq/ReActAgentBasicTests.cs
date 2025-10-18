@@ -21,9 +21,9 @@ public class ReActAgentBasicTests : ProviderTestBase
                 options.ApiKey = config.Providers.Groq.ApiKey;
                 options.Model = config.Providers.Groq.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddTool(new CalculatorTool())
-            .WithReActConfig(cfg => cfg.MaxIterations = 10)
+            .WithReActConfig(cfg => cfg.MaxTurns = 10)
             .BuildReActAgentAsync();
         
         var result = await agent.RunAsync("Calculate 25 * 8");

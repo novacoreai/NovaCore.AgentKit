@@ -1,5 +1,5 @@
+using System.Diagnostics;
 using System.Text.Json;
-using Microsoft.Extensions.Logging;
 using NovaCore.AgentKit.Core.History;
 using NovaCore.AgentKit.Core.Sanitization;
 using NovaCore.AgentKit.Core.TurnValidation;
@@ -19,7 +19,8 @@ internal class Agent
     private readonly ITurnValidator _turnValidator;
     private readonly IOutputSanitizer _sanitizer;
     private readonly AgentConfig _config;
-    private readonly ILogger? _logger;
+    private readonly IAgentObserver? _observer;
+    private readonly string? _conversationId;
     private readonly Dictionary<string, JsonElement> _toolSchemas;
     private readonly Dictionary<string, ITool> _allToolsMap; // Map of all tools (regular + UI) by name
     
@@ -32,7 +33,8 @@ internal class Agent
         ITurnValidator turnValidator,
         IOutputSanitizer sanitizer,
         AgentConfig config,
-        ILogger? logger = null)
+        IAgentObserver? observer = null,
+        string? conversationId = null)
     {
         _llmClient = llmClient;
         _tools = tools;
@@ -42,7 +44,8 @@ internal class Agent
         _turnValidator = turnValidator;
         _sanitizer = sanitizer;
         _config = config;
-        _logger = logger;
+        _observer = observer;
+        _conversationId = conversationId;
         
         // Build tool schemas dictionary and all tools map (include both regular tools and UI tools)
         _toolSchemas = new Dictionary<string, JsonElement>();
@@ -90,14 +93,14 @@ internal class Agent
         List<FileAttachment>? files = null, 
         CancellationToken ct = default)
     {
+        var turnStartTime = Stopwatch.StartNew();
+        
         try
         {
-            // Log user input if configured
-            var loggedInput = ApplyVerbosity(userMessage, _config.Logging.LogUserInput);
-            if (loggedInput != null)
-            {
-                LogTurnInfo("User Input", ("content", loggedInput), ("hasFiles", files?.Count > 0));
-            }
+            // Fire turn start event
+            _observer?.OnTurnStart(new TurnStartEvent(
+                BuildEventContext(),
+                userMessage));
             
             // Create message - multimodal if files are present
         // Check if the message is already in history (ChatAgent pre-adds messages for persistence)
@@ -143,13 +146,12 @@ internal class Agent
                 var validation = _turnValidator.Validate(_historyManager.GetHistory());
                 if (!validation.IsValid)
                 {
-                    _logger?.LogWarning("Invalid conversation turns: {Errors}", string.Join(", ", validation.Errors));
                     var fixedHistory = _turnValidator.Fix(_historyManager.GetHistory());
                     _historyManager.ReplaceHistory(fixedHistory);
                 }
             }
             
-            int toolCallRound = 0;
+            int llmCallCount = 0;
             ChatMessage? lastResponse = null;
             string? completionSignal = null;
             
@@ -185,11 +187,18 @@ internal class Agent
                         })
                 };
                 
-                _logger?.LogDebug("Sending {Count} tools to LLM", llmOptions.Tools.Count);
+                // Fire LLM request event
+                _observer?.OnLlmRequest(new LlmRequestEvent(
+                    BuildEventContext(),
+                    llmMessages,
+                    llmOptions.Tools.Count));
                 
                 // Call LLM - collect streaming updates
+                var llmCallStartTime = Stopwatch.StartNew();
                 var textParts = new List<string>();
                 var collectedToolCalls = new List<LlmToolCall>();
+                LlmUsage? usage = null;
+                LlmFinishReason? finishReason = null;
                 
                 await foreach (var update in _llmClient.GetStreamingResponseAsync(llmMessages, llmOptions, ct))
                 {
@@ -202,7 +211,20 @@ internal class Agent
                     {
                         collectedToolCalls.Add(update.ToolCall);
                     }
+                    
+                    // Capture usage and finish reason from updates (typically in the final update)
+                    if (update.Usage != null)
+                    {
+                        usage = update.Usage;
+                    }
+                    
+                    if (update.FinishReason != null)
+                    {
+                        finishReason = update.FinishReason;
+                    }
                 }
+                
+                llmCallStartTime.Stop();
                 
                 // Combine into final response
                 var combinedText = string.Concat(textParts);
@@ -230,14 +252,14 @@ internal class Agent
                 _historyManager.AddMessage(ourMessage);
                 lastResponse = ourMessage;
                 
-                // Log agent output if configured
-                var loggedOutput = ApplyVerbosity(sanitizedText, _config.Logging.LogAgentOutput);
-                if (loggedOutput != null)
-                {
-                    LogTurnInfo("Agent Output",
-                        ("content", loggedOutput),
-                        ("hasToolCalls", ourMessage.ToolCalls?.Any() == true));
-                }
+                // Fire LLM response event
+                _observer?.OnLlmResponse(new LlmResponseEvent(
+                    BuildEventContext(),
+                    combinedText,
+                    collectedToolCalls,
+                    usage,
+                    finishReason,
+                    llmCallStartTime.Elapsed));
                 
                 // No tool calls? Done
                 if (ourMessage.ToolCalls == null || !ourMessage.ToolCalls.Any())
@@ -245,7 +267,7 @@ internal class Agent
                     break;
                 }
                 
-                toolCallRound++;
+                llmCallCount++;
                 
                 // Execute each tool call
                 foreach (var toolCall in ourMessage.ToolCalls)
@@ -253,16 +275,21 @@ internal class Agent
                     // Check if this is a UI tool - if so, pause and return
                     if (_uiToolNames.Contains(toolCall.FunctionName))
                     {
-                        _logger?.LogDebug("UI tool '{ToolName}' detected - pausing execution", toolCall.FunctionName);
-                        
                         // Return the current response - it contains the UI tool call
                         // The host will handle the UI and call SendAsync again with the result
-                        return new AgentTurn
+                        var uiToolTurn = new AgentTurn
                         {
                             Response = lastResponse?.Text ?? "",
-                            ToolCallsExecuted = toolCallRound,
+                            LlmCallsExecuted = llmCallCount,
                             Success = true
                         };
+                        
+                        _observer?.OnTurnComplete(new TurnCompleteEvent(
+                            BuildEventContext(),
+                            uiToolTurn,
+                            turnStartTime.Elapsed));
+                        
+                        return uiToolTurn;
                     }
                     
                     var result = await ExecuteToolAsync(toolCall.FunctionName, toolCall.Arguments, ct);
@@ -280,30 +307,42 @@ internal class Agent
                 }
                 
                 // Safety: prevent infinite loops
-                if (toolCallRound >= _config.MaxToolRoundsPerTurn)
+                if (llmCallCount >= _config.MaxToolRoundsPerTurn)
                 {
-                    _logger?.LogWarning("Max tool rounds ({Max}) reached in single turn", _config.MaxToolRoundsPerTurn);
                     break;
                 }
             }
             
-            return new AgentTurn
+            var successTurn = new AgentTurn
             {
                 Response = lastResponse?.Text ?? "",
-                ToolCallsExecuted = toolCallRound,
+                LlmCallsExecuted = llmCallCount,
                 CompletionSignal = completionSignal,
                 Success = true
             };
+            
+            _observer?.OnTurnComplete(new TurnCompleteEvent(
+                BuildEventContext(),
+                successTurn,
+                turnStartTime.Elapsed));
+            
+            return successTurn;
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Error executing agent turn");
+            // Fire error event
+            _observer?.OnError(new ErrorEvent(
+                BuildEventContext(),
+                ex,
+                "ExecuteTurnAsync"));
+            
             // Get more detailed error information
             var errorMessage = ex.Message;
             if (ex.InnerException != null)
             {
                 errorMessage += $" | Inner: {ex.InnerException.Message}";
             }
+            
             return new AgentTurn
             {
                 Response = "",
@@ -315,46 +354,47 @@ internal class Agent
     
     private async Task<string> ExecuteToolAsync(string toolName, string argsJson, CancellationToken ct)
     {
+        var toolStartTime = Stopwatch.StartNew();
+        
         try
         {
-            _logger?.LogDebug("Executing tool: {Tool}", toolName);
-            
             var tool = _tools.FirstOrDefault(t => t.Name == toolName);
             if (tool == null)
             {
                 return $"Error: Tool '{toolName}' not found";
             }
             
-            // Log tool call request if configured
-            var loggedRequest = ApplyVerbosity(argsJson, _config.Logging.LogToolCallRequests);
-            if (loggedRequest != null)
-            {
-                // Format JSON for better log readability (unescapes unicode)
-                var formattedArgs = JsonHelper.FormatForLogging(loggedRequest);
-                LogTurnInfo("Tool Call Request",
-                    ("toolName", toolName),
-                    ("arguments", formattedArgs));
-            }
+            // Fire tool execution start event
+            _observer?.OnToolExecutionStart(new ToolExecutionStartEvent(
+                BuildEventContext(),
+                toolName,
+                argsJson));
             
             var result = await tool.InvokeAsync(argsJson, ct);
             
-            // Log tool call response if configured
-            var loggedResponse = ApplyVerbosity(result, _config.Logging.LogToolCallResponses);
-            if (loggedResponse != null)
-            {
-                // Format JSON for better log readability (unescapes unicode)
-                var formattedResult = JsonHelper.FormatForLogging(loggedResponse);
-                LogTurnInfo("Tool Call Response",
-                    ("toolName", toolName),
-                    ("result", formattedResult));
-            }
+            toolStartTime.Stop();
             
-            _logger?.LogDebug("Tool {Tool} executed successfully", toolName);
+            // Fire tool execution complete event
+            _observer?.OnToolExecutionComplete(new ToolExecutionCompleteEvent(
+                BuildEventContext(),
+                toolName,
+                result,
+                toolStartTime.Elapsed));
+            
             return result;
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Error executing tool {Tool}", toolName);
+            toolStartTime.Stop();
+            
+            // Fire tool execution complete event with error
+            _observer?.OnToolExecutionComplete(new ToolExecutionCompleteEvent(
+                BuildEventContext(),
+                toolName,
+                $"Error executing tool: {ex.Message}",
+                toolStartTime.Elapsed,
+                ex));
+            
             return $"Error executing tool: {ex.Message}";
         }
     }
@@ -429,48 +469,16 @@ internal class Agent
     public ToolResultConfig GetRetentionConfig() => _config.ToolResults;
     
     /// <summary>
-    /// Helper method to apply truncation based on verbosity setting
+    /// Build event context for observer events
     /// </summary>
-    private string? ApplyVerbosity(string? content, LogVerbosity verbosity)
+    private AgentEventContext BuildEventContext()
     {
-        if (content == null || verbosity == LogVerbosity.None)
+        return new AgentEventContext
         {
-            return null;
-        }
-        
-        if (verbosity == LogVerbosity.Full)
-        {
-            return content;
-        }
-        
-        // Truncated
-        if (content.Length <= _config.Logging.TruncationLength)
-        {
-            return content;
-        }
-        
-        return content.Substring(0, _config.Logging.TruncationLength) + "...";
-    }
-    
-    /// <summary>
-    /// Log with structured or simple format based on config
-    /// </summary>
-    private void LogTurnInfo(string message, params (string Key, object? Value)[] properties)
-    {
-        if (_logger == null) return;
-        
-        if (_config.Logging.UseStructuredLogging)
-        {
-            // Build structured log with properties
-            var state = properties.ToDictionary(p => p.Key, p => p.Value);
-            _logger.LogInformation("[Turn] {Message} {@Properties}", message, state);
-        }
-        else
-        {
-            // Simple text format
-            var propsText = string.Join(", ", properties.Select(p => $"{p.Key}={p.Value}"));
-            _logger.LogInformation("[Turn] {Message} | {Properties}", message, propsText);
-        }
+            Timestamp = DateTime.UtcNow,
+            ConversationId = _conversationId,
+            MessageCount = _historyManager.GetHistory().Count
+        };
     }
 }
 

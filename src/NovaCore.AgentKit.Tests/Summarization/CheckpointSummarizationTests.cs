@@ -54,7 +54,7 @@ public class CheckpointSummarizationTests : ProviderTestBase
                     KeepRecent = 10   // Would keep last 10 after summarization
                 };
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithHistoryStore(historyStore)
             .ForConversation(conversationId)
             .BuildChatAgentAsync();
@@ -116,16 +116,16 @@ public class CheckpointSummarizationTests : ProviderTestBase
         
         // Assert: Verify DATABASE has all messages (this is what matters for persistence!)
         var dbMessages = await historyStore.LoadAsync(conversationId);
-        Output.WriteLine($"📊 Database messages: {dbMessages.Count}");
+        Output.WriteLine($"📊 Database messages: {dbMessages?.Count ?? 0}");
         
-        var dbUserMessages = dbMessages.Count(m => m.Role == ChatRole.User);
-        var dbAssistantMessages = dbMessages.Count(m => m.Role == ChatRole.Assistant);
+        var dbUserMessages = dbMessages?.Count(m => m.Role == ChatRole.User) ?? 0;
+        var dbAssistantMessages = dbMessages?.Count(m => m.Role == ChatRole.Assistant) ?? 0;
         
         Output.WriteLine($"📊 Database user messages: {dbUserMessages}");
         Output.WriteLine($"📊 Database assistant messages: {dbAssistantMessages}");
         
         // Database should have ALL messages (system + 30 user + 30 assistant = ~61 messages)
-        Assert.True(dbMessages.Count >= 60, $"Expected at least 60 messages in DB, got {dbMessages.Count}");
+        Assert.True((dbMessages?.Count ?? 0) >= 60, $"Expected at least 60 messages in DB, got {dbMessages?.Count ?? 0}");
         Assert.True(dbUserMessages >= 30, $"Expected at least 30 user messages, got {dbUserMessages}");
         Assert.Equal(30, dbAssistantMessages);
         
@@ -135,7 +135,7 @@ public class CheckpointSummarizationTests : ProviderTestBase
         Output.WriteLine("✅ ALL ASSERTIONS PASSED");
         Output.WriteLine("═══════════════════════════════════════");
         Output.WriteLine($"✓ In-memory: {memoryStats.TotalMessages} messages (compressed as designed)");
-        Output.WriteLine($"✓ Database: {dbMessages.Count} messages (all persisted)");
+        Output.WriteLine($"✓ Database: {dbMessages?.Count ?? 0} messages (all persisted)");
         Output.WriteLine($"✓ Checkpoint created: Turn {checkpoint.UpToTurnNumber}");
         Output.WriteLine($"✓ History retention: Limiting context to 10 messages for LLM");
         Output.WriteLine($"✓ Counting game: 30 successful rounds");
@@ -168,7 +168,7 @@ public class CheckpointSummarizationTests : ProviderTestBase
                 cfg.SystemPrompt = "You are a helpful assistant. Give very brief responses.";
                 // No summarization config needed for this test
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithHistoryStore(historyStore)
             .ForConversation($"manual-checkpoint-test-{Guid.NewGuid()}")
             .BuildChatAgentAsync();
@@ -226,7 +226,7 @@ public class CheckpointSummarizationTests : ProviderTestBase
                 cfg.SystemPrompt = "You are a helpful assistant.";
                 // No special config needed for this simple test
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .WithHistoryStore(historyStore)
             .ForConversation($"retention-test-{Guid.NewGuid()}")
             .BuildChatAgentAsync();

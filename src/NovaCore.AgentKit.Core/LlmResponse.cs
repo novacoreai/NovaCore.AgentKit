@@ -31,6 +31,9 @@ public class LlmStreamingUpdate
     
     /// <summary>Finish reason (set on final update)</summary>
     public LlmFinishReason? FinishReason { get; init; }
+    
+    /// <summary>Token usage (typically set on final update)</summary>
+    public LlmUsage? Usage { get; init; }
 }
 
 /// <summary>

@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Logging;
-
 namespace NovaCore.AgentKit.Core.History;
 
 /// <summary>
@@ -10,11 +8,9 @@ namespace NovaCore.AgentKit.Core.History;
 public class InMemoryHistoryManager : IHistoryManager
 {
     private readonly List<ChatMessage> _history = new();
-    private readonly ILogger? _logger;
     
-    public InMemoryHistoryManager(ILogger? logger = null)
+    public InMemoryHistoryManager()
     {
-        _logger = logger;
     }
     
     public void AddMessage(ChatMessage message)

@@ -22,7 +22,7 @@ public class ChatAgentUIToolTests : ProviderTestBase
                 options.ApiKey = config.Providers.Google.ApiKey;
                 options.Model = config.Providers.Google.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddUITool(new PaymentUITool())
             .WithSystemPrompt("You are a payment assistant. When user mentions paying or wants to make a payment, you MUST immediately call the show_payment_page tool with the amount and currency. Do not ask for additional information.")
             .BuildChatAgentAsync();
@@ -47,7 +47,7 @@ public class ChatAgentUIToolTests : ProviderTestBase
                 options.ApiKey = config.Providers.Google.ApiKey;
                 options.Model = config.Providers.Google.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddUITool(new PaymentUITool())
             .WithSystemPrompt("You are a payment assistant. When user mentions paying, MUST call show_payment_page tool immediately. When you receive payment confirmation with a transaction ID, always mention the transaction ID in your response.")
             .BuildChatAgentAsync();
@@ -75,7 +75,7 @@ public class ChatAgentUIToolTests : ProviderTestBase
                 options.ApiKey = config.Providers.Google.ApiKey;
                 options.Model = config.Providers.Google.Model;
             })
-            .WithLogger(Logger)
+            .WithObserver(Observer)
             .AddUITool(new PaymentUITool())
             .WithSystemPrompt("You are a payment assistant. When user mentions paying, MUST call show_payment_page tool immediately. When you receive payment confirmation with a transaction ID, always mention the transaction ID in your response.")
             .BuildChatAgentAsync();
