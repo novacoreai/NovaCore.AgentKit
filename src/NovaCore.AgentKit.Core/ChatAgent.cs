@@ -13,7 +13,7 @@ public class ChatAgent : IAsyncDisposable
     private readonly IHistoryStore? _historyStore;
     private readonly List<IMcpClient> _mcpClients;
     private readonly ILogger? _logger;
-    private readonly CheckpointConfig _checkpointConfig;
+    private readonly SummarizationConfig _summarizationConfig;
     private bool _disposed;
     
     // Track messages already persisted to avoid duplicate saves
@@ -28,14 +28,14 @@ public class ChatAgent : IAsyncDisposable
         IHistoryStore? historyStore = null,
         List<IMcpClient>? mcpClients = null,
         ILogger? logger = null,
-        CheckpointConfig? checkpointConfig = null)
+        SummarizationConfig? summarizationConfig = null)
     {
         _agent = agent;
         _conversationId = conversationId;
         _historyStore = historyStore;
         _mcpClients = mcpClients ?? new List<IMcpClient>();
         _logger = logger;
-        _checkpointConfig = checkpointConfig ?? new CheckpointConfig();
+        _summarizationConfig = summarizationConfig ?? new SummarizationConfig();
     }
     
     /// <summary>
@@ -156,31 +156,34 @@ public class ChatAgent : IAsyncDisposable
     /// </summary>
     private async Task CheckAndCreateCheckpointAsync(CancellationToken ct)
     {
-        // Check if auto-checkpointing is enabled
-        if (!_checkpointConfig.EnableAutoCheckpointing || 
-            _checkpointConfig.SummarizationTool == null ||
+        // Check if auto-summarization is enabled
+        if (!_summarizationConfig.Enabled || 
+            _summarizationConfig.SummarizationTool == null ||
             _historyStore == null)
         {
             return;
         }
         
         var currentHistory = _agent.GetHistoryManager().GetHistory();
-        var messagesSinceLastCheckpoint = currentHistory.Count - _lastCheckpointTurnNumber;
         
-        // Check if we've reached the threshold
-        if (messagesSinceLastCheckpoint < _checkpointConfig.SummarizeEveryNMessages)
+        // Check if we've reached the trigger threshold
+        if (currentHistory.Count < _summarizationConfig.TriggerAt)
         {
             return;
         }
         
+        // Calculate how many messages to summarize
+        // Formula: TriggerAt - KeepRecent = Messages to summarize
+        var messagesToSummarize = _summarizationConfig.TriggerAt - _summarizationConfig.KeepRecent;
+        
         _logger?.LogInformation(
-            "Auto-checkpoint triggered: {MessageCount} messages since last checkpoint (threshold: {Threshold})",
-            messagesSinceLastCheckpoint, _checkpointConfig.SummarizeEveryNMessages);
+            "Auto-summarization triggered: History at {Current} messages (TriggerAt: {Trigger}). Will summarize first {Count} messages.",
+            currentHistory.Count, _summarizationConfig.TriggerAt, messagesToSummarize);
         
         try
         {
-            // Get messages up to the checkpoint point (exclude the most recent N messages)
-            var checkpointTurnNumber = currentHistory.Count - _checkpointConfig.KeepRecentMessages;
+            // Checkpoint turn number = how many messages we're summarizing
+            var checkpointTurnNumber = messagesToSummarize;
             if (checkpointTurnNumber <= _lastCheckpointTurnNumber)
             {
                 // Not enough new messages to create a meaningful checkpoint
@@ -199,15 +202,15 @@ public class ChatAgent : IAsyncDisposable
             }
             
             // IMPORTANT: Apply tool result filtering before summarization
-            // Respects HistoryRetentionConfig.ToolResults (e.g., max tool calls, drop all, etc.)
+            // Uses the same tool filtering config as LLM context
             var historySelector = _agent.GetHistorySelector();
-            var retentionConfig = _agent.GetRetentionConfig();
+            var toolResultConfig = _summarizationConfig.ToolResults;
             
             // Apply same filtering rules used for LLM context
             var filteredMessagesToSummarize = historySelector.SelectMessagesForContext(
                 rawMessagesToSummarize,
                 checkpoint: null, // Don't apply checkpoint logic here, just tool filtering
-                retentionConfig);
+                toolResultConfig);
             
             if (filteredMessagesToSummarize.Count == 0)
             {
@@ -238,7 +241,7 @@ public class ChatAgent : IAsyncDisposable
             
             // Call the summarization tool
             _logger?.LogDebug("Calling summarization tool for {Count} messages", filteredMessagesToSummarize.Count);
-            var summaryJson = await _checkpointConfig.SummarizationTool.InvokeAsync(historyJson, ct);
+            var summaryJson = await _summarizationConfig.SummarizationTool.InvokeAsync(historyJson, ct);
             
             // Extract summary from result (expect { "summary": "..." } or just the text)
             string summary;
@@ -271,7 +274,7 @@ public class ChatAgent : IAsyncDisposable
                     { "auto_created", true },
                     { "original_message_count", rawMessagesToSummarize.Count },
                     { "filtered_message_count", filteredMessagesToSummarize.Count },
-                    { "kept_recent_messages", _checkpointConfig.KeepRecentMessages }
+                    { "kept_recent_messages", _summarizationConfig.KeepRecent }
                 }
             };
             
@@ -280,7 +283,16 @@ public class ChatAgent : IAsyncDisposable
             
             _logger?.LogInformation(
                 "Created automatic checkpoint at turn {Turn} (summarized {Filtered}/{Original} messages after tool filtering, keeping {Recent} recent)",
-                checkpointTurnNumber, filteredMessagesToSummarize.Count, rawMessagesToSummarize.Count, _checkpointConfig.KeepRecentMessages);
+                checkpointTurnNumber, filteredMessagesToSummarize.Count, rawMessagesToSummarize.Count, _summarizationConfig.KeepRecent);
+            
+            // NOW: Remove the summarized messages from in-memory history
+            // Keep only the recent messages (after the checkpoint)
+            var recentMessages = currentHistory.Skip(messagesToSummarize).ToList();
+            _agent.GetHistoryManager().ReplaceHistory(recentMessages);
+            
+            _logger?.LogInformation(
+                "Compressed in-memory history: {Before} → {After} messages (summarized {Summarized} into checkpoint)",
+                currentHistory.Count, recentMessages.Count, messagesToSummarize);
         }
         catch (Exception ex)
         {
