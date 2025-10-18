@@ -21,7 +21,8 @@ Build intelligent agents that chat with users or autonomously complete tasks. Fo
 - [Persistent Conversations](#persistent-conversations)
 - [Automatic Summarization](#automatic-summarization)
 - [UI Tools (Human-in-the-Loop)](#ui-tools-human-in-the-loop)
-- [History Retention (Cost Control)](#history-retention-cost-control)
+- [Automatic Summarization](#automatic-summarization-chatagent)
+- [Tool Result Filtering](#tool-result-filtering-all-agents)
 - [Tools with POCO Arguments](#tools-with-poco-arguments)
 - [Logging](#logging)
 - [Output Sanitization](#output-sanitization)
@@ -325,81 +326,68 @@ if (response.ToolCalls?.Any() == true)
 
 **Use Cases:** Login dialogs, payment forms, file uploads, confirmations, settings panels
 
-### History Retention (Cost Control)
+### Automatic Summarization (ChatAgent)
 
-Control what gets sent to the LLM while keeping full history in storage. Perfect for reducing token costs and managing context windows.
+For long conversations, automatically summarize older messages into checkpoints to maintain context while reducing memory usage.
 
 **How it works:**
-1. Tool results are filtered (based on `ToolResults` config)
-2. Messages are limited to `MaxMessagesToSend`
-3. Within that limit, the most recent `KeepRecentMessagesIntact` are protected
-4. Conversation structure is automatically validated and repaired if needed
+1. Conversation grows to `TriggerAt` messages (e.g., 100)
+2. Calculate: `MessagesToSummarize = TriggerAt - KeepRecent` (e.g., 100 - 10 = 90)
+3. Summarize first 90 messages → Create checkpoint
+4. Remove those 90 from memory, keep last 10
+5. Database retains ALL messages + checkpoint
 
-**Basic configuration:**
+**Configuration:**
 
 ```csharp
-.WithHistoryRetention(config =>
+.WithSummarization(cfg =>
 {
-    // Total messages sent to LLM (0 = unlimited)
-    config.MaxMessagesToSend = 50;
-    
-    // Recent messages always included (should be 20-30% of Max)
-    config.KeepRecentMessagesIntact = 15;
-    
-    // Use checkpoint summaries for long conversations
-    config.UseCheckpointSummary = true;
+    cfg.Enabled = true;
+    cfg.TriggerAt = 100;         // Summarize when we hit 100 messages
+    cfg.KeepRecent = 10;         // Keep last 10 (summarize first 90)
+    cfg.SummarizationTool = summaryTool;
+    cfg.ToolResults.KeepRecent = 5;  // Also filter verbose tool outputs
 })
 ```
 
-**For browser automation / ReAct agents (RECOMMENDED):**
+### Tool Result Filtering (All Agents)
+
+For verbose tool outputs (e.g., browser automation), replace old results with placeholders while preserving structure.
+
+**For ReAct/Browser agents:**
 
 ```csharp
-.WithHistoryRetention(config =>
+.WithToolResultFiltering(cfg =>
 {
-    // Browser agents need higher limits due to tool call loops
-    config.MaxMessagesToSend = 50;
-    config.KeepRecentMessagesIntact = 15;  // 30% of max - optimal ratio
-    
-    // CRITICAL: Tool results are huge (HTML snapshots, screenshots, logs)
-    config.ToolResults.Strategy = ToolResultStrategy.KeepRecent;
-    config.ToolResults.MaxToolResults = 5;  // Only keep last 5 results
+    cfg.KeepRecent = 1;  // Keep only last tool result (perfect for browser agents!)
 })
 ```
 
-**Aggressive filtering (minimal tokens):**
-
-```csharp
-.WithHistoryRetention(config =>
-{
-    config.MaxMessagesToSend = 30;
-    config.KeepRecentMessagesIntact = 9;  // 30% ratio
-    
-    config.ToolResults.Strategy = ToolResultStrategy.KeepOne;  // Only last result
-    config.ToolResults.MaxToolResults = 1;
-})
+**Example output:**
+```
+Browser navigate → Tool result: [Omitted]
+Browser click → Tool result: [Omitted]
+Browser snapshot → Tool result: [5000 chars of HTML]  ← Only this one has full content!
 ```
 
-**Tool result strategies:**
-- `KeepRecent` - Keep most recent N results (default)
-- `KeepSuccessful` - Filter out errors, keep successes
-- `KeepOne` - Only keep the last result
-- `DropAll` - Remove all tool results (extreme context reduction)
+**Recommended values:**
+- Browser agents (Playwright): `KeepRecent = 1-3`
+- ReAct agents: `KeepRecent = 5-10`
+- ChatAgent with tools: Use `Summarization.ToolResults.KeepRecent = 5`
 
-**Automatic features:**
-- ✅ **Configuration validation** - Warns about problematic settings at build time
-- ✅ **Conversation repair** - Automatically fixes invalid message sequences after filtering
-- ✅ **Logging** - See what's being filtered and why
+**Benefits:**
+- ✅ Token reduction: 80-90% for browser agents
+- ✅ Structure preserved: All Assistant messages kept
+- ✅ No orphaned tool calls: IDs always preserved
+- ✅ Recent context: Full detail for latest results
 
 **Example logs:**
 ```
-[INF] History retention: max 50 messages, 15 recent protected, max 5 tool results (KeepRecent)
-[WRN] KeepRecentMessagesIntact (25) is more than 50% of MaxMessagesToSend (40). Consider lowering to 12.
-[INF] Conversation structure repaired successfully. 42 → 38 messages
+[INF] Tool result filtering: keep 5 recent, replace others with placeholders
+[DBG] Tool result filtering: 20 tool messages, 5 kept full, 15 replaced with placeholders
 ```
 
-> **💡 Tip:** For browser agents, always use tool result filtering. Without it, verbose outputs can consume 90% of your context window!
-
-> **⚠️ Important:** Keep `KeepRecentMessagesIntact` between 20-30% of `MaxMessagesToSend` for optimal results.
+> **💡 Tip:** Use placeholder filtering instead of removing messages - it preserves conversation structure!
 
 ### Tools with POCO Arguments
 
@@ -969,11 +957,11 @@ services.AddAgentKit(options =>
 // Configuration
 .WithSystemPrompt(prompt)
 .ForConversation(id)          // Conversation ID (ChatAgent only)
-.WithHistoryStore(store)      // Persistence (ChatAgent only)
-.WithCheckpointing(config)    // Auto-summarization (ChatAgent only)
-.WithHistoryRetention(config) // Cost control
-.WithConfig(config)           // Agent behavior
-.WithLogging(config)          // Logging settings
+.WithHistoryStore(store)         // Persistence (ChatAgent only)
+.WithSummarization(config)       // Auto-summarization (ChatAgent only)
+.WithToolResultFiltering(config) // Reduce verbose tool outputs
+.WithConfig(config)              // Agent behavior
+.WithLogging(config)             // Logging settings
 .WithReActConfig(config)      // ReActAgent settings
 .WithLogger(logger)           // Custom logger
 .WithLoggerFactory(factory)   // Logger factory (for MCP)
@@ -1238,7 +1226,7 @@ A: `AddTool()` = agent executes internally. `AddUITool()` = pauses for host to h
 A: Not in same agent, but you can create multiple agents with different providers.
 
 **Q: How do I reduce costs?**
-A: Use `WithHistoryRetention()` to limit context size. For browser agents, use `MaxToolResults = 3-5` with `ToolResultStrategy.KeepRecent`. This can reduce token usage by 40-60%.
+A: Use `WithSummarization()` for long ChatAgent conversations and `WithToolResultFiltering()` for verbose tool outputs. For browser agents, set `KeepRecent = 1`. This can reduce token usage by 80-90%.
 
 **Q: Do checkpoints delete old messages?**
 A: No - full history stays in database. Checkpoints only affect what's sent to the LLM.

@@ -16,14 +16,9 @@ public interface IHistoryManager
     List<ChatMessage> GetHistory();
     
     /// <summary>
-    /// Replace entire history
+    /// Replace entire history (used after checkpoint compression)
     /// </summary>
     void ReplaceHistory(List<ChatMessage> history);
-    
-    /// <summary>
-    /// Compress history to reduce token count
-    /// </summary>
-    void CompressHistory();
     
     /// <summary>
     /// Clear all history

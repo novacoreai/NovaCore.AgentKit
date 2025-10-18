@@ -34,11 +34,9 @@ public class ReActAgentMcpTests : ProviderTestBase
             .WithLoggerFactory(LoggerFactory)
             .WithMcpClientFactory(mcpFactory)
             .WithMcp(mcpConfig)
-            .WithHistoryRetention(cfg =>
+            .WithToolResultFiltering(cfg =>
             {
-                cfg.ToolResults.Strategy = ToolResultStrategy.KeepRecent;
-                cfg.ToolResults.MaxToolResults = 5;
-                cfg.MaxMessagesToSend = 20;
+                cfg.KeepRecent = 5;  // Keep last 5 tool results with full content
             })
             .WithReActConfig(cfg => cfg.MaxIterations = 15)
             .BuildReActAgentAsync();

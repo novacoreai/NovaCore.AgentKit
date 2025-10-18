@@ -14,14 +14,19 @@ public class AgentConfig
     /// <summary>System prompt for the agent</summary>
     public string? SystemPrompt { get; set; }
     
-    /// <summary>History management configuration</summary>
-    public HistoryConfig History { get; set; } = new();
+    /// <summary>
+    /// Automatic summarization configuration for ChatAgents.
+    /// When enabled, older messages are summarized into checkpoints to maintain context
+    /// while reducing memory usage. Database retains all messages.
+    /// </summary>
+    public SummarizationConfig Summarization { get; set; } = new();
     
     /// <summary>
-    /// History retention configuration - controls what gets sent to the model.
-    /// Note: Full history is still stored, this only affects LLM context.
+    /// Tool result filtering configuration.
+    /// Controls how verbose tool outputs are handled by replacing filtered results
+    /// with "[Omitted]" placeholders. Useful for browser agents and ReAct agents.
     /// </summary>
-    public HistoryRetentionConfig HistoryRetention { get; set; } = new();
+    public ToolResultConfig ToolResults { get; set; } = new();
     
     /// <summary>Output sanitization options</summary>
     public SanitizationOptions Sanitization { get; set; } = new();
@@ -35,7 +40,30 @@ public class AgentConfig
     /// <summary>Logging configuration for agent turns</summary>
     public AgentLoggingConfig Logging { get; set; } = new();
     
-    /// <summary>Automatic checkpoint/summarization configuration</summary>
-    public CheckpointConfig Checkpointing { get; set; } = new();
+    /// <summary>
+    /// [OBSOLETE] Use Summarization property instead.
+    /// This property is kept for backward compatibility and maps to Summarization.
+    /// </summary>
+    [Obsolete("Use Summarization property instead. This will be removed in a future version.")]
+    public CheckpointConfig Checkpointing 
+    { 
+        get => new CheckpointConfig
+        {
+            EnableAutoCheckpointing = Summarization.Enabled,
+            SummarizeEveryNMessages = Summarization.TriggerAt,
+            KeepRecentMessages = Summarization.KeepRecent,
+            SummarizationTool = Summarization.SummarizationTool
+        };
+        set
+        {
+            if (value != null)
+            {
+                Summarization.Enabled = value.EnableAutoCheckpointing;
+                Summarization.TriggerAt = value.SummarizeEveryNMessages;
+                Summarization.KeepRecent = value.KeepRecentMessages;
+                Summarization.SummarizationTool = value.SummarizationTool;
+            }
+        }
+    }
 }
 

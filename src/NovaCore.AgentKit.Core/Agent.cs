@@ -159,10 +159,10 @@ internal class Agent
                 // Get full history from manager
                 var fullHistory = _historyManager.GetHistory();
                 
-                // Apply retention rules to select context for model
+                // Apply tool result filtering to select context for model
                 var contextHistory = _historySelector.SelectMessagesForContext(
                     fullHistory, 
-                    _config.HistoryRetention);
+                    _config.ToolResults);
                 
                 // Convert history to LLM format
                 var llmMessages = ConvertToLlmMessages(contextHistory);
@@ -422,7 +422,11 @@ internal class Agent
     
     public IHistorySelector GetHistorySelector() => _historySelector;
     
-    public HistoryRetentionConfig GetRetentionConfig() => _config.HistoryRetention;
+    /// <summary>
+    /// [OBSOLETE] Use config.ToolResults instead.
+    /// </summary>
+    [Obsolete("Use config.ToolResults instead. This will be removed in a future version.")]
+    public ToolResultConfig GetRetentionConfig() => _config.ToolResults;
     
     /// <summary>
     /// Helper method to apply truncation based on verbosity setting

@@ -112,9 +112,55 @@ public class AgentBuilder
     /// Configure history retention (what gets sent to the model).
     /// Full history is still stored - this only affects LLM context.
     /// </summary>
-    public AgentBuilder WithHistoryRetention(Action<HistoryRetentionConfig> configure)
+    /// <summary>
+    /// [OBSOLETE] Use WithSummarization and/or WithToolResultFiltering instead.
+    /// </summary>
+    [Obsolete("Use WithSummarization() for ChatAgents or WithToolResultFiltering() for tool output management. This will be removed in a future version.")]
+    public AgentBuilder WithHistoryRetention(Action<object> configure)
     {
-        configure(_config.HistoryRetention);
+        // No-op for backward compatibility
+        _logger?.LogWarning("WithHistoryRetention is obsolete. Use WithSummarization() or WithToolResultFiltering() instead.");
+        return this;
+    }
+    
+    /// <summary>
+    /// Configure automatic summarization for long conversations (ChatAgent).
+    /// When enabled, older messages are summarized into checkpoints to maintain context
+    /// while reducing memory usage.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// .WithSummarization(cfg => 
+    /// {
+    ///     cfg.Enabled = true;
+    ///     cfg.TriggerAt = 100;        // Summarize when we hit 100 messages
+    ///     cfg.KeepRecent = 10;        // Keep last 10 messages (summarize first 90)
+    ///     cfg.SummarizationTool = summaryTool;
+    /// })
+    /// </code>
+    /// </example>
+    public AgentBuilder WithSummarization(Action<SummarizationConfig> configure)
+    {
+        configure(_config.Summarization);
+        return this;
+    }
+    
+    /// <summary>
+    /// Configure tool result filtering to reduce verbose tool outputs.
+    /// Filtered tool results are replaced with "[Omitted]" placeholders to maintain
+    /// conversation structure while reducing token count.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// .WithToolResultFiltering(cfg => 
+    /// {
+    ///     cfg.KeepRecent = 5;  // Keep last 5 tool results with full content
+    /// })
+    /// </code>
+    /// </example>
+    public AgentBuilder WithToolResultFiltering(Action<ToolResultConfig> configure)
+    {
+        configure(_config.ToolResults);
         return this;
     }
     
@@ -128,12 +174,15 @@ public class AgentBuilder
     }
     
     /// <summary>
+    /// [OBSOLETE] Use WithSummarization instead.
     /// Configure automatic checkpointing/summarization for long conversations.
-    /// The host application must provide a summarization tool.
     /// </summary>
+    [Obsolete("Use WithSummarization instead. This will be removed in a future version.")]
     public AgentBuilder WithCheckpointing(Action<CheckpointConfig> configure)
     {
+#pragma warning disable CS0618 // Type or member is obsolete
         configure(_config.Checkpointing);
+#pragma warning restore CS0618
         return this;
     }
     
@@ -216,7 +265,7 @@ public class AgentBuilder
             _historyStore, 
             mcpClients, 
             _logger,
-            _config.Checkpointing);
+            _config.Summarization);
         
         // Initialize (loads existing conversation if historyStore is configured)
         await chatAgent.InitializeAsync(ct);
@@ -256,18 +305,26 @@ public class AgentBuilder
             throw new InvalidOperationException("LLM client must be configured. Use a provider method like UseAnthropic()");
         }
         
-        // Validate history retention configuration
-        var configIssues = _config.HistoryRetention.Validate();
-        if (configIssues.Any())
+        // Validate summarization configuration
+        if (_config.Summarization.Enabled)
         {
-            foreach (var issue in configIssues)
+            var configIssues = _config.Summarization.Validate();
+            if (configIssues.Any())
             {
-                _logger?.LogWarning("History retention configuration issue: {Issue}", issue);
+                foreach (var issue in configIssues)
+                {
+                    _logger?.LogWarning("Summarization configuration issue: {Issue}", issue);
+                }
             }
+            
+            _logger?.LogInformation("Summarization: {Config}", _config.Summarization.GetSummary());
         }
         
-        // Log configuration summary
-        _logger?.LogInformation("History retention: {Config}", _config.HistoryRetention.GetSummary());
+        // Log tool result filtering if configured
+        if (_config.ToolResults.KeepRecent > 0)
+        {
+            _logger?.LogInformation("Tool result filtering: {Config}", _config.ToolResults.GetSummary());
+        }
         
         // Initialize MCP clients and discover tools
         var mcpClients = new List<IMcpClient>();
@@ -335,8 +392,8 @@ public class AgentBuilder
         _logger?.LogDebug("Total tools available: {Count} (Manual: {Manual}, MCP: {Mcp}, UI: {UI})", 
             allTools.Count, _tools.Count, discoveredTools.Count, _uiTools.Count);
         
-        // Create history manager
-        var historyManager = _customHistoryManager ?? new InMemoryHistoryManager(_config.History, _logger);
+        // Create history manager (simplified - no auto-compression)
+        var historyManager = _customHistoryManager ?? new InMemoryHistoryManager(_logger);
         
         // Create history selector
         var historySelector = new SmartHistorySelector(_logger);
