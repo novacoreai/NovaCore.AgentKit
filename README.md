@@ -313,9 +313,13 @@ AnthropicModels.ClaudeHaiku35       // claude-3-5-haiku-20241022
 // Models
 OpenAIModels.GPT4o                  // gpt-4o
 OpenAIModels.GPT4oMini              // gpt-4o-mini
-OpenAIModels.O1                     // o1
-OpenAIModels.O1Mini                 // o1-mini
+OpenAIModels.O1                     // o1 (reasoning model)
+OpenAIModels.O1Mini                 // o1-mini (reasoning model)
+OpenAIModels.O1Preview              // o1-preview (reasoning model)
 OpenAIModels.GPT4Turbo              // gpt-4-turbo
+OpenAIModels.GPT4TurboPreview       // gpt-4-turbo-preview
+OpenAIModels.GPT4                   // gpt-4
+OpenAIModels.GPT35Turbo             // gpt-3.5-turbo
 ```
 
 ### Google Gemini
@@ -340,6 +344,7 @@ GoogleModels.Gemini25Pro            // gemini-2.5-pro
 GoogleModels.Gemini25Flash          // gemini-2.5-flash
 GoogleModels.Gemini25FlashLite      // gemini-2.5-flash-lite
 GoogleModels.GeminiFlashLatest      // gemini-flash-latest
+GoogleModels.GeminiFlashLiteLatest  // gemini-flash-lite-latest
 ```
 
 ### xAI Grok
@@ -368,9 +373,13 @@ XAIModels.GrokCodeFast1             // grok-code-fast-1
 
 // Models (Recommended: Llama 3.3 or Qwen for tool calling)
 GroqModels.Llama3_3_70B             // llama-3.3-70b-versatile (128K, excellent tool calling)
-GroqModels.Llama3_1_70B             // llama-3.1-70b-versatile (reliable tool calling)
-GroqModels.Qwen3_32B                // qwen/qwen3-32b (128K context)
+GroqModels.Llama3_1_70B             // llama-3.1-70b-versatile (128K, reliable tool calling)
 GroqModels.Llama3_1_8B              // llama-3.1-8b-instant (fast)
+GroqModels.Llama4Maverick17B        // meta-llama/llama-4-maverick-17b-128e-instruct (128K context, 8K max completion)
+GroqModels.Qwen3_32B                // qwen/qwen3-32b (128K context, 40K max completion)
+GroqModels.GptOss120B               // openai/gpt-oss-120b (UNRELIABLE tool calling)
+GroqModels.GptOss20B                // openai/gpt-oss-20b (UNRELIABLE tool calling)
+GroqModels.KimiK2Instruct           // moonshotai/kimi-k2-instruct-0905 (256K context, 16K max completion)
 ```
 
 ### OpenRouter (Any Model)
@@ -749,62 +758,271 @@ public class TelemetryObserver : IAgentObserver
 ### Core
 
 ```csharp
-// Messages
-ChatMessage(ChatRole role, string? text, string? toolCallId = null)
-ChatMessage(ChatRole role, List<IMessageContent> contents)
-ChatMessage(ChatRole role, string? text, List<ToolCall>? toolCalls)
+// Chat Messages
+class ChatMessage
+{
+    ChatRole Role { get; init; }
+    string? Text { get; init; }
+    List<IMessageContent>? Contents { get; init; }
+    List<ToolCall>? ToolCalls { get; init; }
+    string? ToolCallId { get; init; }
+    
+    // Constructors
+    ChatMessage(ChatRole role, string? text, string? toolCallId = null)
+    ChatMessage(ChatRole role, string? text, List<ToolCall>? toolCalls)
+    ChatMessage(ChatRole role, List<IMessageContent> contents, string? toolCallId = null)
+}
+
 enum ChatRole { System, User, Assistant, Tool }
 
-// Tools
-interface ITool { string Name; string Description; JsonDocument ParameterSchema; Task<string> InvokeAsync(string argsJson, CancellationToken ct); }
-interface IUITool : ITool { }
-class Tool<TArgs, TResult> : ITool
-class SimpleTool<TArgs> : Tool<TArgs, ToolResponse>
-class UITool<TArgs, TResult> : Tool<TArgs, TResult>, IUITool
+// Message Content (for multimodal messages)
+interface IMessageContent { string ContentType { get; } }
+
+record TextMessageContent(string Text) : IMessageContent
+{
+    string ContentType => "text";
+}
+
+record ImageMessageContent(byte[] Data, string MimeType) : IMessageContent
+{
+    string ContentType => "image";
+}
+
+record ToolCallMessageContent(string CallId, string ToolName, string ArgumentsJson) : IMessageContent
+{
+    string ContentType => "tool_call";
+}
+
+record ToolResultMessageContent(string CallId, string Result, bool IsError = false) : IMessageContent
+{
+    string ContentType => "tool_result";
+}
+
+// File Attachments
+class FileAttachment
+{
+    byte[] Data { get; init; }
+    string MediaType { get; init; }
+    string? FileName { get; init; }
+    bool IsImage { get; }                            // Check if image type
+    long Size { get; }                               // File size in bytes
+    
+    // Factory methods
+    static FileAttachment FromBytes(byte[] data, string mediaType, string? fileName = null)
+    static FileAttachment FromBase64(string base64Data, string mediaType, string? fileName = null)
+    static Task<FileAttachment> FromFileAsync(string filePath, CancellationToken ct = default)
+    
+    // Utility methods
+    ImageMessageContent ToMessageContent()
+    string ToBase64()
+}
 
 // Tool Calls
-class ToolCall { string Id; string FunctionName; string Arguments; }
+class ToolCall
+{
+    string Id { get; init; }                         // Unique tool call ID
+    string FunctionName { get; init; }               // Tool/function name
+    string Arguments { get; init; }                  // Arguments as JSON string
+}
 
-// Attachments
-class FileAttachment { byte[] Data; string MediaType; string? FileName; }
-static FileAttachment.FromFileAsync(string path)
-static FileAttachment.FromBytes(byte[] data, string mediaType)
-static FileAttachment.FromBase64(string base64, string mediaType)
+// Tools
+interface ITool
+{
+    string Name { get; }
+    string Description { get; }
+    JsonDocument ParameterSchema { get; }
+    Task<string> InvokeAsync(string argsJson, CancellationToken ct);
+}
 
-// LLM
+interface IUITool : ITool { }  // Marker for human-in-the-loop tools
+
+abstract class Tool<TArgs, TResult> : ITool
+{
+    abstract string Name { get; }
+    abstract string Description { get; }
+    protected abstract Task<TResult> ExecuteAsync(TArgs args, CancellationToken ct);
+}
+
+abstract class SimpleTool<TArgs> : Tool<TArgs, ToolResponse>
+{
+    protected abstract Task<string> RunAsync(TArgs args, CancellationToken ct);
+}
+
+abstract class UITool<TArgs, TResult> : Tool<TArgs, TResult>, IUITool { }
+
+// LLM Client
 interface ILlmClient
-class LlmMessage { MessageRole Role; string? Text; List<IMessageContent>? Contents; string? ToolCallId; }
-class LlmOptions { int? MaxTokens; double? Temperature; double? TopP; Dictionary<string, LlmTool>? Tools; }
-class LlmResponse { string? Text; List<LlmToolCall>? ToolCalls; LlmFinishReason? FinishReason; LlmUsage? Usage; }
-class LlmStreamingUpdate { string? TextDelta; LlmToolCall? ToolCall; LlmFinishReason? FinishReason; LlmUsage? Usage; }
-class LlmUsage { int InputTokens; int OutputTokens; int TotalTokens; }
+{
+    Task<LlmResponse> CompleteAsync(List<LlmMessage> messages, LlmOptions? options = null, CancellationToken ct = default);
+    IAsyncEnumerable<LlmStreamingUpdate> StreamAsync(List<LlmMessage> messages, LlmOptions? options = null, CancellationToken ct = default);
+}
+
+class LlmMessage
+{
+    MessageRole Role { get; init; }
+    string? Text { get; init; }
+    List<IMessageContent>? Contents { get; init; }
+    string? ToolCallId { get; init; }
+}
+
+enum MessageRole { System, User, Assistant, Tool }
+
+class LlmOptions
+{
+    int? MaxTokens { get; set; }
+    double? Temperature { get; set; }
+    double? TopP { get; set; }
+    List<string>? StopSequences { get; set; }
+    Dictionary<string, LlmTool>? Tools { get; set; }
+    Dictionary<string, object>? AdditionalProperties { get; set; }
+}
+
+class LlmTool
+{
+    string Name { get; init; }
+    string Description { get; init; }
+    JsonElement ParameterSchema { get; init; }
+}
+
+class LlmResponse
+{
+    string? Text { get; init; }
+    List<LlmToolCall>? ToolCalls { get; init; }
+    LlmFinishReason? FinishReason { get; init; }
+    LlmUsage? Usage { get; init; }
+}
+
+class LlmStreamingUpdate
+{
+    string? TextDelta { get; init; }
+    LlmToolCall? ToolCall { get; init; }
+    LlmFinishReason? FinishReason { get; init; }
+    LlmUsage? Usage { get; init; }
+}
+
+class LlmUsage
+{
+    int InputTokens { get; init; }
+    int OutputTokens { get; init; }
+    int TotalTokens { get; }  // Computed: InputTokens + OutputTokens
+}
 ```
 
 ### History
 
 ```csharp
-interface IHistoryStore { Task AppendMessageAsync(...); Task<List<ChatMessage>?> LoadAsync(...); Task DeleteAsync(...); Task<List<string>> ListConversationsAsync(...); Task CreateCheckpointAsync(...); Task<ConversationCheckpoint?> GetLatestCheckpointAsync(...); }
-interface IHistoryManager { void AddMessage(ChatMessage message); List<ChatMessage> GetHistory(); void ReplaceHistory(List<ChatMessage> history); void Clear(); HistoryStats GetStats(); }
-interface IHistorySelector { List<ChatMessage> SelectMessagesForContext(List<ChatMessage> fullHistory, ToolResultConfig config); }
+// History Store (persistent storage)
+interface IHistoryStore
+{
+    Task AppendMessageAsync(string conversationId, ChatMessage message, CancellationToken ct = default);
+    Task AppendMessagesAsync(string conversationId, List<ChatMessage> messages, CancellationToken ct = default);
+    Task SaveAsync(string conversationId, List<ChatMessage> history, CancellationToken ct = default);
+    Task<List<ChatMessage>?> LoadAsync(string conversationId, CancellationToken ct = default);
+    Task DeleteAsync(string conversationId, CancellationToken ct = default);
+    Task<List<string>> ListConversationsAsync(CancellationToken ct = default);
+    Task<int> GetMessageCountAsync(string conversationId, CancellationToken ct = default);
+    Task CreateCheckpointAsync(string conversationId, ConversationCheckpoint checkpoint, CancellationToken ct = default);
+    Task<ConversationCheckpoint?> GetLatestCheckpointAsync(string conversationId, CancellationToken ct = default);
+    Task<(ConversationCheckpoint? checkpoint, List<ChatMessage> messages)> LoadFromCheckpointAsync(string conversationId, CancellationToken ct = default);
+}
 
-class ConversationCheckpoint { int UpToTurnNumber; string Summary; DateTime CreatedAt; Dictionary<string, object>? Metadata; }
-class HistoryStats { int TotalMessages; int UserMessages; int AssistantMessages; int ToolMessages; int EstimatedTokens; int CompressionCount; }
+// History Manager (in-memory)
+interface IHistoryManager
+{
+    void AddMessage(ChatMessage message);
+    List<ChatMessage> GetHistory();
+    void ReplaceHistory(List<ChatMessage> history);
+    void Clear();
+    HistoryStats GetStats();
+}
 
-class SummarizationConfig { bool Enabled; int TriggerAt; int KeepRecent; ITool? SummarizationTool; ToolResultConfig ToolResults; }
-class ToolResultConfig { int KeepRecent; }
+// History Selector (context selection)
+interface IHistorySelector
+{
+    List<ChatMessage> SelectMessagesForContext(List<ChatMessage> fullHistory, ToolResultConfig config);
+    List<ChatMessage> SelectMessagesForContext(List<ChatMessage> fullHistory, ConversationCheckpoint? checkpoint, ToolResultConfig config);
+}
+
+// Conversation Checkpoint (summarization point)
+class ConversationCheckpoint
+{
+    int UpToTurnNumber { get; init; }               // Turn number summarized up to (inclusive)
+    string Summary { get; init; }                   // Summary text
+    DateTime CreatedAt { get; init; }               // When checkpoint was created
+    Dictionary<string, object>? Metadata { get; init; }  // Optional metadata
+}
+
+// History Statistics
+class HistoryStats
+{
+    int TotalMessages { get; init; }                // Total message count
+    int UserMessages { get; init; }                 // User message count
+    int AssistantMessages { get; init; }            // Assistant message count
+    int ToolMessages { get; init; }                 // Tool message count
+    int EstimatedTokens { get; init; }              // Estimated token count
+    int CompressionCount { get; init; }             // Compression count (deprecated, always 0)
+}
 ```
 
 ### MCP
 
 ```csharp
-interface IMcpClient : IAsyncDisposable { Task ConnectAsync(); Task<List<McpToolDefinition>> DiscoverToolsAsync(); Task<McpToolResult> CallToolAsync(string toolName, Dictionary<string, object?> arguments, CancellationToken ct); }
-interface IMcpConfiguration { string Command; List<string> Arguments; Dictionary<string, string> Environment; string? WorkingDirectory; }
+// MCP Client (Model Context Protocol)
+interface IMcpClient : IAsyncDisposable
+{
+    Task ConnectAsync(CancellationToken ct = default);
+    Task<List<McpToolDefinition>> DiscoverToolsAsync(CancellationToken ct = default);
+    Task<McpToolResult> CallToolAsync(string toolName, Dictionary<string, object?> arguments, CancellationToken ct = default);
+    McpConnectionStatus ConnectionStatus { get; }
+}
+
+// MCP Configuration
+interface IMcpConfiguration
+{
+    string Command { get; }                         // Command to execute (e.g., "npx")
+    List<string> Arguments { get; }                 // Command arguments
+    Dictionary<string, string> Environment { get; } // Environment variables
+    string? WorkingDirectory { get; }               // Working directory
+}
+
 class McpConfiguration : IMcpConfiguration
+{
+    string Command { get; set; }
+    List<string> Arguments { get; set; }
+    Dictionary<string, string> Environment { get; set; }
+    string? WorkingDirectory { get; set; }
+}
+
+// MCP Tool Definition
+class McpToolDefinition
+{
+    string Name { get; init; }                      // Tool name
+    string Description { get; init; }               // Tool description
+    JsonElement InputSchema { get; init; }          // JSON schema for parameters
+}
+
+// MCP Tool Result
+class McpToolResult
+{
+    bool Success { get; init; }                     // Whether execution succeeded
+    JsonElement? Data { get; init; }                // Result data
+    string? Error { get; init; }                    // Error message if failed
+}
+
+// MCP Connection Status
+enum McpConnectionStatus
+{
+    Disconnected,
+    Connecting,
+    Connected,
+    Failed
+}
 ```
 
 ### Observer
 
 ```csharp
+// Observer Interface (all methods have default no-op implementations)
 interface IAgentObserver
 {
     void OnTurnStart(TurnStartEvent evt);
@@ -816,29 +1034,170 @@ interface IAgentObserver
     void OnError(ErrorEvent evt);
 }
 
-// Event Types
-record AgentEventContext { DateTime Timestamp; string? ConversationId; int MessageCount; }
-record TurnStartEvent(AgentEventContext Context, string UserMessage);
-record TurnCompleteEvent(AgentEventContext Context, AgentTurn Result, TimeSpan Duration);
-record LlmRequestEvent(AgentEventContext Context, IReadOnlyList<LlmMessage> Messages, int ToolCount);
-record LlmResponseEvent(AgentEventContext Context, string? Text, List<LlmToolCall>? ToolCalls, LlmUsage? Usage, LlmFinishReason? FinishReason, TimeSpan Duration);
-record ToolExecutionStartEvent(AgentEventContext Context, string ToolName, string Arguments);
-record ToolExecutionCompleteEvent(AgentEventContext Context, string ToolName, string Result, TimeSpan Duration, Exception? Error);
-record ErrorEvent(AgentEventContext Context, Exception Exception, string Phase);
+// Shared Event Context (present in all events)
+record AgentEventContext
+{
+    DateTime Timestamp { get; init; }        // When event occurred (UTC)
+    string? ConversationId { get; init; }    // Conversation ID (null for ReActAgent)
+    int MessageCount { get; init; }          // Current message count in history
+}
+
+// Turn Start Event
+record TurnStartEvent(
+    AgentEventContext Context,
+    string UserMessage                       // User's input message
+);
+
+// Turn Complete Event
+record TurnCompleteEvent(
+    AgentEventContext Context,
+    AgentTurn Result,                        // Turn result (see AgentTurn below)
+    TimeSpan Duration                        // Total turn duration
+);
+
+// LLM Request Event (before API call)
+record LlmRequestEvent(
+    AgentEventContext Context,
+    IReadOnlyList<LlmMessage> Messages,      // Messages being sent to LLM
+    int ToolCount                            // Number of tools available
+);
+
+// LLM Response Event (after API call)
+record LlmResponseEvent(
+    AgentEventContext Context,
+    string? Text,                            // Generated text
+    List<LlmToolCall>? ToolCalls,           // Tool calls requested (see LlmToolCall below)
+    LlmUsage? Usage,                        // Token usage (see LlmUsage below)
+    LlmFinishReason? FinishReason,          // Why generation stopped (Stop/Length/ToolCalls/ContentFilter)
+    TimeSpan Duration                        // LLM API call duration
+);
+
+// Tool Execution Start Event
+record ToolExecutionStartEvent(
+    AgentEventContext Context,
+    string ToolName,                         // Name of tool being executed
+    string Arguments                         // JSON arguments
+);
+
+// Tool Execution Complete Event
+record ToolExecutionCompleteEvent(
+    AgentEventContext Context,
+    string ToolName,                         // Name of tool executed
+    string Result,                           // Tool result (JSON string)
+    TimeSpan Duration,                       // Tool execution duration
+    Exception? Error                         // Exception if tool failed (null if success)
+);
+
+// Error Event
+record ErrorEvent(
+    AgentEventContext Context,
+    Exception Exception,                     // The exception that occurred
+    string Phase                             // Phase where error occurred (e.g., "LLM", "Tool", "Turn")
+);
+
+// Supporting Types
+
+class AgentTurn
+{
+    string Response { get; init; }           // Agent's response text
+    int LlmCallsExecuted { get; init; }      // Number of LLM calls in this turn
+    string? CompletionSignal { get; init; }  // Completion signal (ReActAgent only)
+    bool Success { get; init; }              // Whether turn succeeded
+    string? Error { get; init; }             // Error message if failed
+}
+
+class LlmToolCall
+{
+    string Id { get; init; }                 // Unique tool call ID
+    string Name { get; init; }               // Tool name
+    string ArgumentsJson { get; init; }      // Arguments as JSON string
+}
+
+class LlmUsage
+{
+    int InputTokens { get; init; }           // Input/prompt tokens
+    int OutputTokens { get; init; }          // Output/completion tokens
+    int TotalTokens { get; }                 // InputTokens + OutputTokens
+}
+
+enum LlmFinishReason
+{
+    Stop,                                    // Natural stop
+    Length,                                  // Max tokens reached
+    ToolCalls,                               // Stopped to execute tools
+    ContentFilter                            // Content policy violation
+}
+
+class LlmMessage
+{
+    MessageRole Role { get; init; }          // System/User/Assistant/Tool
+    string? Text { get; init; }              // Text content
+    List<IMessageContent>? Contents { get; init; }  // Multimodal content
+    string? ToolCallId { get; init; }        // Tool call ID (for Tool role)
+}
+
+enum MessageRole { System, User, Assistant, Tool }
 ```
 
 ### Configuration
 
 ```csharp
-class AgentConfig { int MaxToolRoundsPerTurn; string? SystemPrompt; SummarizationConfig Summarization; ToolResultConfig ToolResults; SanitizationOptions Sanitization; bool EnableTurnValidation; bool EnableOutputSanitization; }
+// Agent Configuration
+class AgentConfig
+{
+    int MaxToolRoundsPerTurn { get; set; }              // Default: 10
+    string? SystemPrompt { get; set; }                  // System instructions
+    SummarizationConfig Summarization { get; set; }     // Auto-summarization (ChatAgent)
+    ToolResultConfig ToolResults { get; set; }          // Tool result filtering
+    SanitizationOptions Sanitization { get; set; }      // Output cleaning
+    bool EnableTurnValidation { get; set; }             // Default: true
+    bool EnableOutputSanitization { get; set; }         // Default: true
+}
 
-class SanitizationOptions { bool RemoveThinkingTags; bool UnwrapJsonFromMarkdown; bool TrimWhitespace; bool RemoveNullCharacters; }
+// Summarization Configuration (ChatAgent)
+class SummarizationConfig
+{
+    bool Enabled { get; set; }                          // Default: false
+    int TriggerAt { get; set; }                         // Default: 100
+    int KeepRecent { get; set; }                        // Default: 10
+    ITool? SummarizationTool { get; set; }              // Required if Enabled
+    ToolResultConfig ToolResults { get; set; }          // Nested tool filtering
+}
 
-class ReActConfig { int MaxTurns; bool DetectStuckAgent; bool BreakOnStuck; }
+// Tool Result Filtering Configuration
+class ToolResultConfig
+{
+    int KeepRecent { get; set; }                        // Default: 0 (unlimited)
+    // Recommended: Browser=1-3, ReAct=5-10, Chat=5
+}
 
-class ReActResult { bool Success; string FinalAnswer; int TurnsExecuted; int TotalLlmCalls; TimeSpan Duration; string? Error; }
+// Sanitization Options
+class SanitizationOptions
+{
+    bool RemoveThinkingTags { get; set; }               // Default: true
+    bool UnwrapJsonFromMarkdown { get; set; }           // Default: true
+    bool TrimWhitespace { get; set; }                   // Default: true
+    bool RemoveNullCharacters { get; set; }             // Default: true
+}
 
-class AgentTurn { string Response; int LlmCallsExecuted; string? CompletionSignal; bool Success; string? Error; }
+// ReAct Agent Configuration
+class ReActConfig
+{
+    int MaxTurns { get; set; }                          // Default: 20
+    bool DetectStuckAgent { get; set; }                 // Default: true
+    bool BreakOnStuck { get; set; }                     // Default: false
+}
+
+// ReAct Agent Result
+class ReActResult
+{
+    bool Success { get; init; }                         // Task completed successfully
+    string FinalAnswer { get; init; }                   // Final answer/result
+    int TurnsExecuted { get; init; }                    // Turns executed
+    int TotalLlmCalls { get; init; }                    // Total LLM calls
+    TimeSpan Duration { get; init; }                    // Execution time
+    string? Error { get; init; }                        // Error if failed
+}
 ```
 
 ---
