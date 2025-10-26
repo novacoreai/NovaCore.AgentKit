@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using NovaCore.AgentKit.Core.CostTracking;
 using NovaCore.AgentKit.Core.History;
 using NovaCore.AgentKit.Core.Sanitization;
 using NovaCore.AgentKit.Core.TurnValidation;
@@ -12,6 +13,8 @@ namespace NovaCore.AgentKit.Core;
 internal class Agent
 {
     private readonly ILlmClient _llmClient;
+    private readonly string _modelName;
+    private readonly ICostCalculator _costCalculator;
     private readonly List<ITool> _tools;
     private readonly HashSet<string> _uiToolNames;
     private readonly IHistoryManager _historyManager;
@@ -26,6 +29,8 @@ internal class Agent
     
     public Agent(
         ILlmClient llmClient,
+        string modelName,
+        ICostCalculator costCalculator,
         List<ITool> tools,
         List<IUITool> uiTools,
         IHistoryManager historyManager,
@@ -37,6 +42,8 @@ internal class Agent
         string? conversationId = null)
     {
         _llmClient = llmClient;
+        _modelName = modelName;
+        _costCalculator = costCalculator;
         _tools = tools;
         _uiToolNames = new HashSet<string>(uiTools.Select(t => t.Name));
         _historyManager = historyManager;
@@ -155,6 +162,11 @@ internal class Agent
             ChatMessage? lastResponse = null;
             string? completionSignal = null;
             
+            // Track cumulative tokens and cost for this turn
+            int totalInputTokens = 0;
+            int totalOutputTokens = 0;
+            decimal totalCost = 0m;
+            
             // Tool call loop
             while (true)
             {
@@ -224,6 +236,28 @@ internal class Agent
                     }
                 }
                 
+                // Calculate cost if usage is available
+                if (usage != null)
+                {
+                    // Calculate input and output costs separately
+                    var inputCost = _costCalculator.Calculate(_modelName, usage.InputTokens, 0);
+                    var outputCost = _costCalculator.Calculate(_modelName, 0, usage.OutputTokens);
+                    
+                    // Create usage with cost information
+                    usage = new LlmUsage
+                    {
+                        InputTokens = usage.InputTokens,
+                        OutputTokens = usage.OutputTokens,
+                        InputCost = inputCost,
+                        OutputCost = outputCost
+                    };
+                    
+                    // Accumulate totals
+                    totalInputTokens += usage.InputTokens;
+                    totalOutputTokens += usage.OutputTokens;
+                    totalCost += usage.TotalCost;
+                }
+                
                 llmCallStartTime.Stop();
                 
                 // Combine into final response
@@ -255,6 +289,7 @@ internal class Agent
                 // Fire LLM response event
                 _observer?.OnLlmResponse(new LlmResponseEvent(
                     BuildEventContext(),
+                    _modelName,
                     combinedText,
                     collectedToolCalls,
                     usage,
@@ -281,7 +316,10 @@ internal class Agent
                         {
                             Response = lastResponse?.Text ?? "",
                             LlmCallsExecuted = llmCallCount,
-                            Success = true
+                            Success = true,
+                            TotalInputTokens = totalInputTokens,
+                            TotalOutputTokens = totalOutputTokens,
+                            TotalCost = totalCost
                         };
                         
                         _observer?.OnTurnComplete(new TurnCompleteEvent(
@@ -318,7 +356,10 @@ internal class Agent
                 Response = lastResponse?.Text ?? "",
                 LlmCallsExecuted = llmCallCount,
                 CompletionSignal = completionSignal,
-                Success = true
+                Success = true,
+                TotalInputTokens = totalInputTokens,
+                TotalOutputTokens = totalOutputTokens,
+                TotalCost = totalCost
             };
             
             _observer?.OnTurnComplete(new TurnCompleteEvent(
@@ -347,7 +388,10 @@ internal class Agent
             {
                 Response = "",
                 Success = false,
-                Error = errorMessage
+                Error = errorMessage,
+                TotalInputTokens = 0,
+                TotalOutputTokens = 0,
+                TotalCost = 0m
             };
         }
     }

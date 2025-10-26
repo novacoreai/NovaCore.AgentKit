@@ -54,8 +54,9 @@ public static class GoogleAgentBuilderExtensions
             chatClient = CreateGoogleAIChatClient(options);
         }
         
-        // Register with builder
-        builder.UseLlmClient(chatClient);
+        // Register with builder (use internal method to pass model name for cost tracking)
+        builder.UseLlmClient(chatClient)
+               .WithModel(options.Model);
         
         return builder;
     }

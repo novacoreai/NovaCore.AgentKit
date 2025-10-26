@@ -85,6 +85,7 @@ public record LlmRequestEvent(
 /// </summary>
 public record LlmResponseEvent(
     AgentEventContext Context,
+    string ModelName,
     string? Text,
     List<LlmToolCall>? ToolCalls,
     LlmUsage? Usage,

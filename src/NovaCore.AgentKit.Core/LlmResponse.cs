@@ -70,5 +70,14 @@ public class LlmUsage
     public int InputTokens { get; init; }
     public int OutputTokens { get; init; }
     public int TotalTokens => InputTokens + OutputTokens;
+    
+    /// <summary>Cost for input tokens (in USD)</summary>
+    public decimal InputCost { get; init; }
+    
+    /// <summary>Cost for output tokens (in USD)</summary>
+    public decimal OutputCost { get; init; }
+    
+    /// <summary>Total cost (in USD)</summary>
+    public decimal TotalCost => InputCost + OutputCost;
 }
 

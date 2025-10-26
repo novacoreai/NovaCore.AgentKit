@@ -19,5 +19,14 @@ public class AgentTurn
     
     /// <summary>Error message (if any)</summary>
     public string? Error { get; init; }
+    
+    /// <summary>Total input tokens used in this turn</summary>
+    public int TotalInputTokens { get; init; }
+    
+    /// <summary>Total output tokens used in this turn</summary>
+    public int TotalOutputTokens { get; init; }
+    
+    /// <summary>Total cost for this turn (in USD)</summary>
+    public decimal TotalCost { get; init; }
 }
 

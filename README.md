@@ -1,6 +1,6 @@
 # NovaCore.AgentKit
 
-**Production-ready AI agents for .NET** - Build ChatAgents for conversations or ReActAgents for autonomous tasks. Clean API, full-featured, 6 LLM providers.
+**Production-ready AI agents for .NET** - Build ChatAgents for conversations or ReActAgents for autonomous tasks. Clean API, full-featured, 6 LLM providers. **Built-in real-time cost tracking.**
 
 [![.NET 9.0](https://img.shields.io/badge/.NET-9.0-blue)](https://dotnet.microsoft.com/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -477,6 +477,10 @@ public class MyObserver : IAgentObserver
         // Cost tracking
         if (evt.Usage != null)
             _costTracker.RecordUsage(evt.Usage.InputTokens, evt.Usage.OutputTokens);
+            
+        // New: Built-in cost tracking
+        Console.WriteLine($"Model: {evt.ModelName}");
+        Console.WriteLine($"Cost: ${evt.Usage?.TotalCost:F6}");
     }
     
     public void OnToolExecutionStart(ToolExecutionStartEvent evt)
@@ -501,6 +505,10 @@ public class MyObserver : IAgentObserver
     public void OnTurnComplete(TurnCompleteEvent evt)
     {
         Console.WriteLine($"Turn complete: {evt.Duration.TotalSeconds:F2}s");
+        
+        // New: Built-in cost and token tracking
+        Console.WriteLine($"Total cost: ${evt.Result.TotalCost:F4}");
+        Console.WriteLine($"Total tokens: {evt.Result.TotalInputTokens + evt.Result.TotalOutputTokens}");
     }
     
     public void OnError(ErrorEvent evt)
@@ -518,9 +526,9 @@ public class MyObserver : IAgentObserver
 | Event | Fires When | Key Data |
 |-------|-----------|----------|
 | `OnTurnStart` | Turn begins | `UserMessage` |
-| `OnTurnComplete` | Turn ends | `AgentTurn`, `Duration` |
+| `OnTurnComplete` | Turn ends | `AgentTurn`, `Duration`, **Cost & Tokens** |
 | `OnLlmRequest` | Before LLM API call | `Messages`, `ToolCount` |
-| `OnLlmResponse` | After LLM responds | `Text`, `ToolCalls`, `Usage`, `Duration` |
+| `OnLlmResponse` | After LLM responds | **`ModelName`**, `Text`, `ToolCalls`, **`Usage`**, `Duration`, **Cost** |
 | `OnToolExecutionStart` | Tool starts | `ToolName`, `Arguments` |
 | `OnToolExecutionComplete` | Tool finishes | `ToolName`, `Result`, `Duration`, `Error?` |
 | `OnError` | Any error occurs | `Exception`, `Phase` |
@@ -545,7 +553,7 @@ public void OnLlmRequest(LlmRequestEvent evt)
 // Cost tracking
 public void OnLlmResponse(LlmResponseEvent evt)
 {
-    _costs.Add(CalculateCost(evt.Usage));
+    _costs.Add(evt.Usage?.TotalCost ?? 0);  // New: Built-in cost tracking
 }
 
 // Progress UI
@@ -600,6 +608,8 @@ public void OnLlmRequest(LlmRequestEvent evt)
 .WithObserver(observer)           // Observability events
 .WithReActConfig(cfg)             // ReActAgent settings
 .WithHistoryManager(manager)      // Custom history
+.WithCostCalculator(calculator)   // Custom cost calculator
+.WithModel(modelName)              // NEW: Set model name for cost tracking
 
 // Build
 .BuildChatAgentAsync()            // Interactive conversations
@@ -636,7 +646,7 @@ public class MonitoringObserver : IAgentObserver
         if (evt.Usage != null)
         {
             _totalTokens += evt.Usage.TotalTokens;
-            _totalCost += CalculateCost(evt.Usage);
+            _totalCost += evt.Usage.TotalCost;  // New: Built-in cost tracking
             
             Console.WriteLine($"Session: {_totalTokens} tokens, ${_totalCost:F4}, {_sessionTimer.Elapsed}");
         }
@@ -666,33 +676,42 @@ public class RedisHistoryStore : IHistoryStore
 
 ### Cost Tracking
 
-Use the observer pattern for real-time cost tracking:
+**Built-in real-time cost tracking** - Monitor LLM API costs automatically:
 
 ```csharp
-public class CostTracker : IAgentObserver
+public class CostObserver : IAgentObserver
 {
-    private decimal _totalCost = 0;
-    
     public void OnLlmResponse(LlmResponseEvent evt)
     {
-        if (evt.Usage != null)
-        {
-            var cost = CalculateCost(
-                evt.Usage.InputTokens, 
-                evt.Usage.OutputTokens,
-                modelPricing);
-            
-            _totalCost += cost;
-            _logger.LogInformation("Cost this turn: ${Cost:F4}, Total: ${Total:F4}", 
-                cost, _totalCost);
-        }
+        // Per-response cost tracking
+        Console.WriteLine($"Model: {evt.ModelName}");
+        Console.WriteLine($"Cost: ${evt.Usage.TotalCost:F6}");
+        Console.WriteLine($"  Input: ${evt.Usage.InputCost:F6} ({evt.Usage.InputTokens} tokens)");
+        Console.WriteLine($"  Output: ${evt.Usage.OutputCost:F6} ({evt.Usage.OutputTokens} tokens)");
     }
-    
-    public decimal GetTotalCost() => _totalCost;
+
+    public void OnTurnComplete(TurnCompleteEvent evt)
+    {
+        // Turn-level summary
+        Console.WriteLine($"Turn cost: ${evt.Result.TotalCost:F4}");
+        Console.WriteLine($"Total tokens: {evt.Result.TotalInputTokens + evt.Result.TotalOutputTokens}");
+    }
 }
 
-.WithObserver(new CostTracker())
+.WithObserver(new CostObserver())
 ```
+
+**Automatic pricing for all major providers:**
+- **OpenAI:** GPT-4o, GPT-4o-mini, o1 series, GPT-4, GPT-3.5-turbo
+- **Anthropic:** Claude 4.5, 4, 3.7 series
+- **Google:** Gemini 2.5 Pro, Flash, Flash Lite
+- **XAI:** Grok 4 variants
+- **Unknown models:** Return $0.00 (as requested)
+
+**Cost tracking events:**
+- `OnLlmResponse`: Per LLM call (granular)
+- `OnTurnComplete`: Per turn (summary)
+- `OnError`: Zero cost on errors
 
 ### Rate Limiting
 
@@ -1065,6 +1084,7 @@ record LlmRequestEvent(
 // LLM Response Event (after API call)
 record LlmResponseEvent(
     AgentEventContext Context,
+    string ModelName,                        // NEW: Which model was used
     string? Text,                            // Generated text
     List<LlmToolCall>? ToolCalls,           // Tool calls requested (see LlmToolCall below)
     LlmUsage? Usage,                        // Token usage (see LlmUsage below)
@@ -1104,6 +1124,11 @@ class AgentTurn
     string? CompletionSignal { get; init; }  // Completion signal (ReActAgent only)
     bool Success { get; init; }              // Whether turn succeeded
     string? Error { get; init; }             // Error message if failed
+    
+    // NEW: Built-in cost and token tracking
+    int TotalInputTokens { get; init; }      // Total input tokens used in turn
+    int TotalOutputTokens { get; init; }     // Total output tokens used in turn
+    decimal TotalCost { get; init; }         // Total cost for the turn (USD)
 }
 
 class LlmToolCall
@@ -1118,6 +1143,11 @@ class LlmUsage
     int InputTokens { get; init; }           // Input/prompt tokens
     int OutputTokens { get; init; }          // Output/completion tokens
     int TotalTokens { get; }                 // InputTokens + OutputTokens
+    
+    // NEW: Built-in cost tracking
+    decimal InputCost { get; init; }         // Cost for input tokens (USD)
+    decimal OutputCost { get; init; }        // Cost for output tokens (USD)
+    decimal TotalCost { get; }               // InputCost + OutputCost
 }
 
 enum LlmFinishReason

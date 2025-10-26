@@ -31,8 +31,9 @@ public static class AnthropicAgentBuilderExtensions
         // Create LLM client using direct REST implementation
         var llmClient = new AnthropicChatClient(options);
         
-        // Register with builder
-        builder.UseLlmClient(llmClient);
+        // Register with builder (use internal method to pass model name for cost tracking)
+        builder.UseLlmClient(llmClient)
+               .WithModel(options.Model);
         
         return builder;
     }
@@ -70,7 +71,8 @@ public static class AnthropicAgentBuilderExtensions
         
         var llmClient = new AnthropicChatClient(options, logger);
         
-        builder.UseLlmClient(llmClient);
+        builder.UseLlmClient(llmClient)
+               .WithModel(options.Model);
         
         return builder;
     }

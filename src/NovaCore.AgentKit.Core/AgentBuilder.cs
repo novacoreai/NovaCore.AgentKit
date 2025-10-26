@@ -1,3 +1,4 @@
+using NovaCore.AgentKit.Core.CostTracking;
 using NovaCore.AgentKit.Core.History;
 using NovaCore.AgentKit.Core.Sanitization;
 using NovaCore.AgentKit.Core.TurnValidation;
@@ -10,6 +11,8 @@ namespace NovaCore.AgentKit.Core;
 public class AgentBuilder
 {
     private ILlmClient? _llmClient;
+    private string _modelName = "unknown";
+    private ICostCalculator _costCalculator = new ModelPricingCalculator();
     private readonly List<ITool> _tools = new();
     private readonly List<IUITool> _uiTools = new();
     private readonly List<IMcpConfiguration> _mcpConfigurations = new();
@@ -28,6 +31,25 @@ public class AgentBuilder
     public AgentBuilder UseLlmClient(ILlmClient llmClient)
     {
         _llmClient = llmClient;
+        return this;
+    }
+    
+    /// <summary>
+    /// Set the LLM client with model name for cost tracking
+    /// </summary>
+    internal AgentBuilder UseLlmClient(ILlmClient llmClient, string modelName)
+    {
+        _llmClient = llmClient;
+        _modelName = modelName;
+        return this;
+    }
+    
+    /// <summary>
+    /// Set the model name for cost tracking (when using custom LLM client)
+    /// </summary>
+    public AgentBuilder WithModel(string modelName)
+    {
+        _modelName = modelName;
         return this;
     }
     
@@ -363,6 +385,8 @@ public class AgentBuilder
         
         var agent = new Agent(
             _llmClient,
+            _modelName,
+            _costCalculator,
             allTools,
             _uiTools.ToList(),
             historyManager,

@@ -26,8 +26,9 @@ public static class XAIAgentBuilderExtensions
         // Create custom LLM client
         var llmClient = new XAILlmClient(options);
         
-        // Register with builder
-        builder.UseLlmClient(llmClient);
+        // Register with builder (use internal method to pass model name for cost tracking)
+        builder.UseLlmClient(llmClient)
+               .WithModel(options.Model);
         
         return builder;
     }
@@ -64,7 +65,8 @@ public static class XAIAgentBuilderExtensions
         }
         
         var llmClient = new XAILlmClient(options, logger);
-        builder.UseLlmClient(llmClient);
+        builder.UseLlmClient(llmClient)
+               .WithModel(options.Model);
         
         return builder;
     }
