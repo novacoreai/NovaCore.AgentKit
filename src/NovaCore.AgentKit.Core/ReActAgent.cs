@@ -92,9 +92,10 @@ public class ReActAgent : IAsyncDisposable
     {
         return $@"{task}
 
-Use available tools to complete this task step by step.
+    Explain your reasoning and progress and next steps briefly. (text output)
+    Then use available tools to complete this task step by step. (tool calls)
+    When finished, call the 'complete_task' tool. (tool call)";
 
-When finished, call the 'complete_task' tool with your answer.";
     }
     
     /// <summary>
