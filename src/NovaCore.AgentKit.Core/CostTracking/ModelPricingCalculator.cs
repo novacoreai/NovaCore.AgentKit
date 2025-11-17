@@ -53,6 +53,21 @@ public class ModelPricingCalculator : ICostCalculator
             InputCostPer1M = 0.50m,
             OutputCostPer1M = 1.50m
         },
+        ["gpt-5.1"] = new ModelPricing
+        {
+            InputCostPer1M = 1.25m,
+            OutputCostPer1M = 10.00m
+        },
+        ["gpt-5.1-mini"] = new ModelPricing
+        {
+            InputCostPer1M = 0.25m,
+            OutputCostPer1M = 2.00m
+        },
+        ["gpt-5.1-nano"] = new ModelPricing
+        {
+            InputCostPer1M = 0.05m,
+            OutputCostPer1M = 0.40m
+        },
         
         // Anthropic Models
         ["claude-sonnet-4-5-20250929"] = new ModelPricing

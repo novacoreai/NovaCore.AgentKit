@@ -19,6 +19,7 @@ public class ChatAgentBasicTests : ProviderTestBase
             {
                 options.ApiKey = config.Providers.OpenAI.ApiKey;
                 options.Model = config.Providers.OpenAI.Model;
+                options.ReasoningEffort = config.Providers.OpenAI.ReasoningEffort;
             })
             .WithObserver(Observer)
             .WithSystemPrompt("You are a helpful assistant. Give brief responses.")
@@ -29,6 +30,7 @@ public class ChatAgentBasicTests : ProviderTestBase
         Assert.Equal(ChatRole.Assistant, response.Role);
         Assert.Contains("4", response.Text);
         Output.WriteLine($"Response: {response.Text}");
+        Output.WriteLine($"Model: {config.Providers.OpenAI.Model}, ReasoningEffort: {config.Providers.OpenAI.ReasoningEffort}");
         
         await agent.DisposeAsync();
     }

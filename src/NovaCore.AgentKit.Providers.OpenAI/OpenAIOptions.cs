@@ -37,6 +37,12 @@ public class OpenAIOptions
     /// <summary>Seed for deterministic outputs</summary>
     public int? Seed { get; set; }
     
+    /// <summary>Reasoning effort level for GPT-5.1 models (none, low, medium, high)</summary>
+    public string? ReasoningEffort { get; set; }
+    
+    /// <summary>Prompt cache retention duration for extended caching (e.g., "24h")</summary>
+    public string? PromptCacheRetention { get; set; }
+    
     /// <summary>Organization ID (optional)</summary>
     public string? OrganizationId { get; set; }
     

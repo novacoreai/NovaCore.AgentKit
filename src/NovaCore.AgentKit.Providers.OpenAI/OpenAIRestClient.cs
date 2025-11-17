@@ -158,6 +158,14 @@ internal record OpenAIRequest
     [JsonPropertyName("stream_options")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public object? StreamOptions { get; init; }
+    
+    [JsonPropertyName("reasoning_effort")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ReasoningEffort { get; init; }
+    
+    [JsonPropertyName("prompt_cache_retention")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? PromptCacheRetention { get; init; }
 }
 
 internal record OpenAIMessage

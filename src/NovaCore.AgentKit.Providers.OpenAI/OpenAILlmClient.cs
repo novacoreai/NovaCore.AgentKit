@@ -87,7 +87,9 @@ public class OpenAILlmClient : ILlmClient
             Temperature = options?.Temperature ?? _options.Temperature,
             TopP = options?.TopP ?? _options.TopP,
             MaxCompletionTokens = options?.MaxTokens ?? _options.MaxTokens,
-            Stop = options?.StopSequences
+            Stop = options?.StopSequences,
+            ReasoningEffort = _options.ReasoningEffort,
+            PromptCacheRetention = _options.PromptCacheRetention
         };
         
         // Add tools if any

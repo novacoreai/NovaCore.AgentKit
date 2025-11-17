@@ -36,5 +36,15 @@ public static class OpenAIModels
     // GPT-3.5
     /// <summary>GPT-3.5 Turbo - Fast and cost-effective</summary>
     public const string GPT35Turbo = "gpt-3.5-turbo";
+    
+    // GPT-5.1 models
+    /// <summary>GPT-5.1 - Advanced reasoning model</summary>
+    public const string GPT51 = "gpt-5.1";
+    
+    /// <summary>GPT-5.1 Mini - Faster and more cost-effective</summary>
+    public const string GPT51Mini = "gpt-5.1-mini";
+    
+    /// <summary>GPT-5.1 Nano - Most economical option</summary>
+    public const string GPT51Nano = "gpt-5.1-nano";
 }
 

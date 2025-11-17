@@ -308,9 +308,16 @@ AnthropicModels.ClaudeHaiku35       // claude-3-5-haiku-20241022
     options.MaxTokens = 4096;
     options.Temperature = 0.7;
     options.FrequencyPenalty = 0.5;
+    
+    // GPT-5.1 specific options
+    options.ReasoningEffort = "high";        // none, low, medium, high
+    options.PromptCacheRetention = "24h";    // Extended caching
 })
 
 // Models
+OpenAIModels.GPT51                  // gpt-5.1 (advanced reasoning, 400K context)
+OpenAIModels.GPT51Mini              // gpt-5.1-mini (faster, cost-effective)
+OpenAIModels.GPT51Nano              // gpt-5.1-nano (most economical)
 OpenAIModels.GPT4o                  // gpt-4o
 OpenAIModels.GPT4oMini              // gpt-4o-mini
 OpenAIModels.O1                     // o1 (reasoning model)
@@ -702,7 +709,7 @@ public class CostObserver : IAgentObserver
 ```
 
 **Automatic pricing for all major providers:**
-- **OpenAI:** GPT-4o, GPT-4o-mini, o1 series, GPT-4, GPT-3.5-turbo
+- **OpenAI:** GPT-5.1 series, GPT-4o, GPT-4o-mini, o1 series, GPT-4, GPT-3.5-turbo
 - **Anthropic:** Claude 4.5, 4, 3.7 series
 - **Google:** Gemini 2.5 Pro, Flash, Flash Lite
 - **XAI:** Grok 4 variants

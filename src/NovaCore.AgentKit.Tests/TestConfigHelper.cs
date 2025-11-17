@@ -51,7 +51,8 @@ public static class TestConfigHelper
                     OpenAI = new ProviderConfig
                     {
                         ApiKey = Configuration["Providers:OpenAI:ApiKey"]!,
-                        Model = Configuration["Providers:OpenAI:Model"]!
+                        Model = Configuration["Providers:OpenAI:Model"]!,
+                        ReasoningEffort = Configuration["Providers:OpenAI:ReasoningEffort"]
                     },
                     Groq = new ProviderConfig
                     {
@@ -83,6 +84,7 @@ public class ProviderConfig
 {
     public required string ApiKey { get; init; }
     public required string Model { get; init; }
+    public string? ReasoningEffort { get; init; }
 }
 
 
