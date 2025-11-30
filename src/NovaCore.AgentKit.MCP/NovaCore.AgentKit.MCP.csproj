@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <PackageId>NovaCore.AgentKit.MCP</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>NovaCore</Authors>
+    <Description>Model Context Protocol integration for NovaCore.AgentKit</Description>
+    <PackageTags>ai;agents;mcp;modelcontextprotocol</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference Core project -->
+    <ProjectReference Include="..\NovaCore.AgentKit.Core\NovaCore.AgentKit.Core.csproj" />
+    
+    <!-- Official MCP SDK -->
+    <PackageReference Include="ModelContextProtocol" Version="0.4.0-preview.2" />
+    
+    <!-- Logging -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.9" />
+    
+    <!-- JSON Serialization -->
+    <PackageReference Include="System.Text.Json" Version="9.0.9" />
+  </ItemGroup>
+
+</Project>

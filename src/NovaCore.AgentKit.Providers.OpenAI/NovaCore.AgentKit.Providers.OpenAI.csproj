@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <PackageId>NovaCore.AgentKit.Providers.OpenAI</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>NovaCore</Authors>
+    <Description>OpenAI provider for NovaCore.AgentKit with GPT-4 and o1 support</Description>
+    <PackageTags>ai;agents;openai;gpt;llm</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference Core project -->
+    <PackageReference Include="System.ClientModel" Version="1.7.0" />
+    <PackageReference Include="System.Memory.Data" Version="9.0.9" />
+    <ProjectReference Include="..\NovaCore.AgentKit.Core\NovaCore.AgentKit.Core.csproj" />
+    
+    <!-- OpenAI SDK -->
+    <PackageReference Include="OpenAI" Version="2.5.0" />
+    
+    <!-- Microsoft.Extensions.AI.OpenAI provides the extension methods -->
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="9.9.1-preview.1.25474.6" />
+  </ItemGroup>
+
+</Project>

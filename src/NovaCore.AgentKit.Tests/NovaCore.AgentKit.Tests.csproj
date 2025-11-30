@@ -1,0 +1,62 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" Version="8.7.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="9.0.9" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Playwright" Version="1.49.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reference all AgentKit projects -->
+    <ProjectReference Include="..\NovaCore.AgentKit.Core\NovaCore.AgentKit.Core.csproj" />
+    <ProjectReference Include="..\NovaCore.AgentKit.EntityFramework\NovaCore.AgentKit.EntityFramework.csproj" />
+    <ProjectReference Include="..\NovaCore.AgentKit.Extensions.OpenTelemetry\NovaCore.AgentKit.Extensions.OpenTelemetry.csproj" />
+    <ProjectReference Include="..\NovaCore.AgentKit.MCP\NovaCore.AgentKit.MCP.csproj" />
+    <ProjectReference Include="..\NovaCore.AgentKit.Providers.Anthropic\NovaCore.AgentKit.Providers.Anthropic.csproj" />
+    <ProjectReference Include="..\NovaCore.AgentKit.Providers.Google\NovaCore.AgentKit.Providers.Google.csproj" />
+    
+    <!-- All providers working with latest package versions -->
+    <ProjectReference Include="..\NovaCore.AgentKit.Providers.Anthropic\NovaCore.AgentKit.Providers.Anthropic.csproj" />
+    <ProjectReference Include="..\NovaCore.AgentKit.Providers.Google\NovaCore.AgentKit.Providers.Google.csproj" />
+    
+    <ProjectReference Include="..\NovaCore.AgentKit.Providers.OpenAI\NovaCore.AgentKit.Providers.OpenAI.csproj" />
+    <ProjectReference Include="..\NovaCore.AgentKit.Providers.XAI\NovaCore.AgentKit.Providers.XAI.csproj" />
+    <ProjectReference Include="..\NovaCore.AgentKit.Providers.Groq\NovaCore.AgentKit.Providers.Groq.csproj" />
+    <ProjectReference Include="..\NovaCore.AgentKit.Providers.OpenRouter\NovaCore.AgentKit.Providers.OpenRouter.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copy test configuration -->
+    <None Update="testconfig.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    
+    <!-- Copy test files -->
+    <None Update="Files\test.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

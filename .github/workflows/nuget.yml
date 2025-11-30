@@ -1,0 +1,63 @@
+name: build-and-publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore NovaCore.AgentKit.sln
+
+      - name: Build
+        run: dotnet build NovaCore.AgentKit.sln -c Release --no-restore
+
+      - name: Test (Core only)
+        run: dotnet test src/NovaCore.AgentKit.Tests/NovaCore.AgentKit.Tests.csproj -c Release --no-build --filter "FullyQualifiedName~NovaCore.AgentKit.Tests.Core" --verbosity normal
+
+      - name: Determine version from tag
+        id: v
+        shell: pwsh
+        run: |
+          $ref = '${{ github.ref }}'
+          if ($ref -match 'refs/tags/v(?<v>\d+\.\d+\.\d+(?:-.+)?)') {
+            echo "version=$($Matches['v'])" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "version=0.0.0-ci-${{ github.run_number }}" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Pack
+        run: |
+          $version='${{ steps.v.outputs.version }}'
+          dotnet pack NovaCore.AgentKit.sln -c Release --no-build -o ./artifacts /p:Version=$version /p:ContinuousIntegrationBuild=true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkgs
+          path: |
+            artifacts/*.nupkg
+            artifacts/*.snupkg
+
+      - name: Publish to NuGet
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path artifacts -Filter *.nupkg | ForEach-Object {
+            dotnet nuget push $_.FullName --api-key "$env:NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+          }
+
+
