@@ -35,6 +35,9 @@ public class GoogleOptions
     /// <summary>Top K sampling</summary>
     public int? TopK { get; set; }
     
+    /// <summary>Thinking level for models that support reasoning (e.g., gemini-3-flash-preview)</summary>
+    public ThinkingLevel? ThinkingLevel { get; set; }
+    
     // Google-specific features
     
     /// <summary>Safety level (e.g., "BLOCK_NONE", "BLOCK_MEDIUM_AND_ABOVE")</summary>

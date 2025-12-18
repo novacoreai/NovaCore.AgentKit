@@ -378,6 +378,26 @@ public class GoogleChatClient : ILlmClient
             config["topK"] = _options.TopK.Value;
         }
         
+        // Add thinking config if thinking level is specified
+        if (_options.ThinkingLevel.HasValue)
+        {
+            var thinkingLevelString = _options.ThinkingLevel.Value switch
+            {
+                ThinkingLevel.High => "HIGH",
+                ThinkingLevel.Medium => "MEDIUM",
+                ThinkingLevel.Low => "LOW",
+                ThinkingLevel.Minimal => "MINIMAL",
+                _ => "HIGH"
+            };
+            
+            config["thinkingConfig"] = new Dictionary<string, object>
+            {
+                ["thinkingLevel"] = thinkingLevelString
+            };
+            
+            _logger?.LogDebug("Setting thinking level to {ThinkingLevel}", thinkingLevelString);
+        }
+        
         return config.Any() ? config : null;
     }
     
