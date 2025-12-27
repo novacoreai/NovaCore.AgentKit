@@ -46,5 +46,9 @@ public static class OpenAIModels
     
     /// <summary>GPT-5.1 Nano - Most economical option</summary>
     public const string GPT51Nano = "gpt-5.1-nano";
+    
+    // GPT-5.2 models
+    /// <summary>GPT-5.2 - Best model for coding and agentic tasks</summary>
+    public const string GPT52 = "gpt-5.2";
 }
 

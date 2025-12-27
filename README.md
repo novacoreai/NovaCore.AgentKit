@@ -889,30 +889,34 @@ public class RateLimitingObserver : IAgentObserver
 }
 ```
 
-### OpenTelemetry Integration
+### OpenTelemetry (Metrics)
 
-```csharp
-public class TelemetryObserver : IAgentObserver
-{
-    private readonly ActivitySource _activitySource = new("NovaCore.AgentKit");
-    
-    public void OnTurnStart(TurnStartEvent evt)
-    {
-        var activity = _activitySource.StartActivity("AgentTurn");
-        activity?.SetTag("conversation_id", evt.Context.ConversationId);
-    }
-    
-    public void OnLlmResponse(LlmResponseEvent evt)
-    {
-        Activity.Current?.SetTag("tokens", evt.Usage?.TotalTokens);
-    }
-    
-    public void OnError(ErrorEvent evt)
-    {
-        Activity.Current?.SetStatus(ActivityStatusCode.Error, evt.Exception.Message);
-    }
-}
+AgentKit can emit **per-LLM-call (granular) metrics** for tokens and cost via OpenTelemetry Metrics.
+
+**1) Install the package:**
+
+```bash
+dotnet add package NovaCore.AgentKit.Extensions.OpenTelemetry
 ```
+
+**2) Configure your host app's OpenTelemetry Metrics pipeline/exporter** (Prometheus, OTLP, etc).
+
+AgentKit metrics are produced under the **Meter**:
+- `novacore.agentkit`
+
+**Metric instruments emitted (per LLM response, as deltas):**
+- `novacore.agentkit.llm.input_tokens` (Counter, unit: `token`)
+- `novacore.agentkit.llm.output_tokens` (Counter, unit: `token`)
+- `novacore.agentkit.llm.input_cost_usd` (Counter, unit: `USD`)
+- `novacore.agentkit.llm.output_cost_usd` (Counter, unit: `USD`)
+
+**Dimensions (labels):**
+- `model`
+- `host_app` (auto-detected from entry assembly)
+- `pricing_known` (false when tokens exist but pricing is unknown → cost is $0.00)
+
+**Auto-wiring behavior:**
+- If the `NovaCore.AgentKit.Extensions.OpenTelemetry` package is referenced, AgentKit **automatically attaches** the metrics observer internally (no `.WithObserver(...)` required).
 
 ---
 
@@ -1409,7 +1413,7 @@ class ReActResult
 - **NovaCore.AgentKit.Providers.OpenRouter** - Any model
 
 ### Extensions
-- **NovaCore.AgentKit.Extensions.OpenTelemetry** - Telemetry (interfaces available)
+- **NovaCore.AgentKit.Extensions.OpenTelemetry** - OpenTelemetry **metrics** (tokens + cost), auto-wired when referenced
 
 ---
 

@@ -434,6 +434,8 @@ public class AgentBuilder
         // Create output sanitizer
         var sanitizer = new OutputSanitizer();
         
+        var observer = TelemetryAutoWiring.AttachMetricsObserverIfAvailable(_observer);
+        
         var agent = new Agent(
             _llmClient,
             _modelName,
@@ -445,7 +447,7 @@ public class AgentBuilder
             turnValidator,
             sanitizer,
             _config,
-            _observer,
+            observer,
             conversationId);
         
         return (agent, mcpClients);
